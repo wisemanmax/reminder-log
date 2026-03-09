@@ -1,0 +1,33 @@
+{
+  "name": "ReminderLog",
+  "short_name": "ReminderLog",
+  "description": "A reminders and task management PWA. Part of the IRONLOG ecosystem.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#03090f",
+  "theme_color": "#03090f",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "health",
+    "lifestyle",
+    "productivity"
+  ],
+  "scope": "/",
+  "lang": "en-US",
+  "shortcuts": [
+    {
+      "name": "Open ReminderLog",
+      "short_name": "ReminderLog",
+      "description": "Open ReminderLog",
+      "url": "/"
+    }
+  ]
+}

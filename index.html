@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="ReminderLog"/>
+<meta name="theme-color" content="#03090f"/>
+<title>ReminderLog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body,#root{height:100%;width:100%;margin:0;padding:0;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;background:#03090f}
+@supports(-webkit-touch-callout:none){html,body,#root{height:-webkit-fill-available}}
+body{font-family:'Outfit',sans-serif;color:#e0f2fe;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+input,button,select,textarea{font-family:'Outfit',sans-serif}
+input[type=date]::-webkit-calendar-picker-indicator,input[type=time]::-webkit-calendar-picker-indicator{filter:invert(0.6) sepia(1) saturate(5) hue-rotate(180deg)}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+::-webkit-scrollbar{display:none}
+.sheet-head{padding-top:max(16px,env(safe-area-inset-top,0px));padding-bottom:12px;flex-shrink:0}
+.sheet-footer{padding-bottom:max(20px,env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-top:12px}
+.tab-bar{padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
+.main-scroll{padding-bottom:max(100px,calc(80px + env(safe-area-inset-bottom,0px)));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes strikethrough{from{width:0}to{width:100%}}
+.fade-up{animation:fadeUp .25s ease both}
+textarea{resize:none;outline:none}
+
+@media(orientation:landscape) and (max-height:500px){#root{display:none!important}#landscape-lock{display:flex!important}}
+#landscape-lock{display:none;position:fixed;inset:0;background:#08080d;z-index:99999;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:'Outfit',sans-serif;color:#94a3b8;font-size:14px;text-align:center;padding:20px}
+</style>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="apple-touch-icon" href="./icon.svg"/>
+</head>
+<body>
+<div id="landscape-lock"><div style="font-size:32px">🔄</div><div>Please rotate your device to portrait mode</div></div>
+<div id="root"><div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;color:#38bdf8"><div style="font-size:32px">🔔</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;opacity:.5">Loading...</div></div></div>
+<script>
+var loadStatus={};
+function loadScript(url,name){
+  return new Promise(function(resolve,reject){
+    var s=document.createElement('script');s.src=url;s.crossOrigin='anonymous';
+    s.onload=function(){loadStatus[name]='ok';resolve();};
+    s.onerror=function(){loadStatus[name]='FAILED';reject(new Error(name+' failed from '+url));};
+    document.head.appendChild(s);
+  });
+}
+function showError(msg){
+  document.getElementById('root').innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;gap:12px;background:#03090f"><div style="font-size:28px">🚫</div><div style="color:#f87171;font-family:monospace;font-size:13px;line-height:1.6;max-width:320px">'+msg+'</div><div style="color:#64748b;font-size:11px">Check your internet connection and reload</div></div>';
+}
+(function(){
+  loadScript('https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js','React')
+  .catch(function(){return loadScript('https://unpkg.com/react@18/umd/react.production.min.js','React');})
+  .then(function(){
+    return loadScript('https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js','ReactDOM')
+    .catch(function(){return loadScript('https://unpkg.com/react-dom@18/umd/react-dom.production.min.js','ReactDOM');});
+  })
+  .then(function(){
+    return loadScript('https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js','Recharts')
+    .catch(function(){return loadScript('https://unpkg.com/recharts@2.5.0/umd/Recharts.js','Recharts');});
+  })
+  .then(function(){
+    return loadScript('https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.0/babel.min.js','Babel')
+    .catch(function(){return loadScript('https://unpkg.com/@babel/standalone@7.24.0/babel.min.js','Babel');});
+  })
+  .then(function(){
+    if(typeof React==='undefined')throw new Error('React not available');
+    if(typeof Babel==='undefined')throw new Error('Babel not available');
+    var src=document.getElementById('app-src');
+    if(!src)throw new Error('App source not found');
+    var compiled;
+    try{compiled=Babel.transform(src.textContent,{presets:[['react',{runtime:'classic'}]],filename:'app.jsx'}).code;}
+    catch(e){throw new Error('Compile error: '+e.message.slice(0,120));}
+    try{new Function(compiled)();}
+    catch(e){throw new Error('Runtime error: '+e.message.slice(0,120));}
+  })
+  .catch(function(e){showError(e.message);});
+})();
+</script>
+<script type="text/plain" id="app-src">
+const{useState,useEffect,useReducer,useCallback,useMemo,useRef}=React;
+
+const LS={get:(k)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+const todayStr=()=>new Date().toISOString().split("T")[0];
+const nowStr=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
+const fmtDate=(d)=>{if(!d)return"";try{const dt=new Date(d+"T12:00:00");const today=new Date();today.setHours(0,0,0,0);const diff=Math.round((dt-today)/86400000);if(diff===0)return"Today";if(diff===1)return"Tomorrow";if(diff===-1)return"Yesterday";if(diff>0&&diff<7)return dt.toLocaleDateString("en-US",{weekday:"short"});return dt.toLocaleDateString("en-US",{month:"short",day:"numeric"});}catch(e){return d;}};
+const fmtFull=(d)=>{try{return new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});}catch(e){return d;}};
+const isOverdue=(r)=>{if(r.done||!r.date)return false;const today=new Date();today.setHours(23,59,59,0);return new Date(r.date+"T23:59:59")<new Date(todayStr()+"T00:00:00");};
+const isToday=(r)=>r.date===todayStr();
+const isTomorrow=(r)=>{const d=new Date();d.setDate(d.getDate()+1);return r.date===d.toISOString().split("T")[0];};
+
+
+// ─── Theme ───
+const DARK={
+  bg:"#03090f",card:"rgba(56,189,248,0.04)",cardBorder:"rgba(56,189,248,0.1)",
+  accent:"#38bdf8",accent2:"#7dd3fc",blue2:"#60a5fa",purple:"#a78bfa",
+  danger:"#f87171",warn:"#fbbf24",green:"#34d399",pink:"#f472b6",
+  text:"#e0f2fe",text2:"#7dd3fc",text3:"#2d5a72",
+  font:"'Outfit',sans-serif",mono:"'JetBrains Mono',monospace",
+  sheetBg:"linear-gradient(180deg,#080f1a,#03090f)",navBg:"rgba(3,9,15,0.96)",mode:"dark"
+};
+const LIGHT={
+  bg:"#f0f9ff",card:"rgba(14,165,233,0.04)",cardBorder:"rgba(14,165,233,0.12)",
+  accent:"#0284c7",accent2:"#0369a1",blue2:"#1d4ed8",purple:"#7c3aed",
+  danger:"#dc2626",warn:"#d97706",green:"#16a34a",pink:"#db2777",
+  text:"#0c4a6e",text2:"#0369a1",text3:"#64748b",
+  font:"'Outfit',sans-serif",mono:"'JetBrains Mono',monospace",
+  sheetBg:"linear-gradient(180deg,#ffffff,#f0f9ff)",navBg:"rgba(240,249,255,0.97)",mode:"light"
+};
+const V={...(LS.get("rl-theme")==="light"?LIGHT:DARK)};
+const setTheme=(m)=>{const t=m==="light"?LIGHT:DARK;Object.assign(V,t);LS.set("rl-theme",m);document.body.style.background=V.bg;document.body.style.color=V.text;document.querySelector('meta[name="theme-color"]')?.setAttribute("content",V.bg);};
+const Haptic={light:()=>{try{navigator.vibrate?.(10);}catch(e){}},success:()=>{try{navigator.vibrate?.([10,30,10]);}catch(e){}},};
+
+// ─── IRON_RANKS — shared IRONLOG ecosystem ───
+const IRON_RANKS=[
+  {level:1,tier:"Bronze",name:"Bronze I",icon:"🥉",xpNeeded:0,color:"#cd7f32",tierColor:"#cd7f32"},
+  {level:2,tier:"Bronze",name:"Bronze II",icon:"🥉",xpNeeded:200,color:"#c87533",tierColor:"#cd7f32"},
+  {level:3,tier:"Bronze",name:"Bronze III",icon:"🥉",xpNeeded:500,color:"#b87333",tierColor:"#cd7f32"},
+  {level:4,tier:"Silver",name:"Silver I",icon:"🥈",xpNeeded:1000,color:"#94a3b8",tierColor:"#c0c0c0"},
+  {level:5,tier:"Silver",name:"Silver II",icon:"🥈",xpNeeded:1800,color:"#c0c0c0",tierColor:"#c0c0c0"},
+  {level:6,tier:"Silver",name:"Silver III",icon:"🥈",xpNeeded:2800,color:"#e2e8f0",tierColor:"#c0c0c0"},
+  {level:7,tier:"Gold",name:"Gold I",icon:"🥇",xpNeeded:4000,color:"#fbbf24",tierColor:"#f59e0b"},
+  {level:8,tier:"Gold",name:"Gold II",icon:"🥇",xpNeeded:5500,color:"#f59e0b",tierColor:"#f59e0b"},
+  {level:9,tier:"Gold",name:"Gold III",icon:"🥇",xpNeeded:7500,color:"#d97706",tierColor:"#f59e0b"},
+  {level:10,tier:"Platinum",name:"Platinum I",icon:"💠",xpNeeded:10000,color:"#67e8f9",tierColor:"#22d3ee"},
+  {level:11,tier:"Platinum",name:"Platinum II",icon:"💠",xpNeeded:13000,color:"#22d3ee",tierColor:"#22d3ee"},
+  {level:12,tier:"Platinum",name:"Platinum III",icon:"💠",xpNeeded:17000,color:"#06b6d4",tierColor:"#22d3ee"},
+  {level:13,tier:"Diamond",name:"Diamond I",icon:"💎",xpNeeded:22000,color:"#a5b4fc",tierColor:"#6366f1"},
+  {level:14,tier:"Diamond",name:"Diamond II",icon:"💎",xpNeeded:28000,color:"#6366f1",tierColor:"#6366f1"},
+  {level:15,tier:"Diamond",name:"Diamond III",icon:"💎",xpNeeded:35000,color:"#4f46e5",tierColor:"#6366f1"},
+  {level:16,tier:"Master",name:"Master I",icon:"⚔️",xpNeeded:43000,color:"#f87171",tierColor:"#f43f5e"},
+  {level:17,tier:"Master",name:"Master II",icon:"⚔️",xpNeeded:52000,color:"#f43f5e",tierColor:"#f43f5e"},
+  {level:18,tier:"Master",name:"Master III",icon:"⚔️",xpNeeded:63000,color:"#e11d48",tierColor:"#f43f5e"},
+  {level:19,tier:"Grandmaster",name:"Grandmaster I",icon:"👑",xpNeeded:76000,color:"#f9a8d4",tierColor:"#ec4899"},
+  {level:20,tier:"Grandmaster",name:"Grandmaster II",icon:"👑",xpNeeded:91000,color:"#ec4899",tierColor:"#ec4899"},
+  {level:21,tier:"Grandmaster",name:"Grandmaster III",icon:"👑",xpNeeded:108000,color:"#db2777",tierColor:"#ec4899"},
+  {level:22,tier:"Champion",name:"Champion I",icon:"🏆",xpNeeded:128000,color:"#fb923c",tierColor:"#f97316"},
+  {level:23,tier:"Champion",name:"Champion II",icon:"🏆",xpNeeded:150000,color:"#f97316",tierColor:"#f97316"},
+  {level:24,tier:"Champion",name:"Champion III",icon:"🏆",xpNeeded:175000,color:"#ea580c",tierColor:"#f97316"},
+  {level:25,tier:"Iron Legend",name:"Iron Legend I",icon:"⚜️",xpNeeded:205000,color:"#34d399",tierColor:"#10b981"},
+  {level:26,tier:"Iron Legend",name:"Iron Legend II",icon:"⚜️",xpNeeded:240000,color:"#10b981",tierColor:"#10b981"},
+  {level:27,tier:"Iron Legend",name:"Iron Legend III",icon:"⚜️",xpNeeded:280000,color:"#059669",tierColor:"#10b981"},
+  {level:28,tier:"Immortal",name:"Immortal I",icon:"🔱",xpNeeded:325000,color:"#c4b5fd",tierColor:"#8b5cf6"},
+  {level:29,tier:"Immortal",name:"Immortal II",icon:"🔱",xpNeeded:380000,color:"#8b5cf6",tierColor:"#8b5cf6"},
+  {level:30,tier:"Immortal",name:"Immortal III",icon:"🔱",xpNeeded:440000,color:"#7c3aed",tierColor:"#8b5cf6"},
+];
+
+// ─── ReminderLog XP Calculation ───
+function calcScore(s){
+  let xp=0;
+  const reminders=s.reminders||[];
+  // Each completed reminder: 8 XP
+  xp+=reminders.filter(r=>r.done).length*8;
+  // Custom lists (beyond defaults): 15 XP each
+  const defaultIds=["personal","work","health","shopping","errands"];
+  xp+=(s.lists||[]).filter(l=>!defaultIds.includes(l.id)).length*15;
+  // Daily completion bonuses: find days where ≥3 reminders were done
+  const doneByDay={};reminders.filter(r=>r.done&&r.doneAt).forEach(r=>{const d=r.doneAt.slice(0,10);doneByDay[d]=(doneByDay[d]||0)+1;});
+  Object.values(doneByDay).forEach(n=>{if(n>=3)xp+=25;if(n>=5)xp+=25;});
+  const rank=[...IRON_RANKS].reverse().find(r=>xp>=r.xpNeeded)||IRON_RANKS[0];
+  const nextRank=IRON_RANKS.find(r=>r.level===rank.level+1);
+  const xpIntoRank=xp-rank.xpNeeded;
+  const xpForNext=nextRank?(nextRank.xpNeeded-rank.xpNeeded):null;
+  const pct=xpForNext?Math.min(100,Math.round(xpIntoRank/xpForNext*100)):100;
+  return{xp,rank,nextRank,xpIntoRank,xpForNext,pct,streak:0};
+}
+
+// ─── ReminderLog Daily Missions ───
+function getDailyMissions(s){
+  const td=today();
+  const doneToday=(s.reminders||[]).filter(r=>r.done&&r.doneAt&&r.doneAt.startsWith(td));
+  const overdueCount=(s.reminders||[]).filter(r=>!r.done&&r.date&&r.date<td).length;
+  const totalToday=(s.reminders||[]).filter(r=>!r.done&&r.date===td);
+  const allTodayDone=totalToday.length>0&&totalToday.every(r=>r.done);
+  const defaultIds=["personal","work","health","shopping","errands"];
+  const hasCustomList=(s.lists||[]).some(l=>!defaultIds.includes(l.id));
+  const highPriDone=(s.reminders||[]).some(r=>r.done&&r.priority==="high"&&r.doneAt&&r.doneAt.startsWith(td));
+  return[
+    {icon:"✅",title:"Complete 3 Reminders",desc:"Check off 3 reminders today",xp:25,done:doneToday.length>=3},
+    {icon:"🎯",title:"Clear Today's List",desc:"Complete all of today's reminders",xp:40,done:allTodayDone&&totalToday.length>0},
+    {icon:"⚡",title:"Tackle High Priority",desc:"Complete a high-priority reminder",xp:20,done:highPriDone},
+    {icon:"📋",title:"Create a Custom List",desc:"Add a list beyond the defaults",xp:15,done:hasCustomList},
+    {icon:"🔥",title:"No Overdue Items",desc:"Keep your overdue count at zero",xp:20,done:overdueCount===0},
+    {icon:"➕",title:"Add a Reminder",desc:"Create at least one new reminder today",xp:10,done:(s.reminders||[]).some(r=>r.createdAt&&r.createdAt.startsWith(td))},
+  ];
+}
+
+// ─── Level-Up Detection Hook ───
+function useLevelUp(score,lsKey){
+  const {rank}=score;
+  const [celebrating,setCelebrating]=useState(false);
+  const [celebRank,setCelebRank]=useState(null);
+  useEffect(()=>{
+    const saved=parseInt(LS.get(lsKey)||"1");
+    if(rank.level>saved){
+      LS.set(lsKey,rank.level);
+      setCelebRank(rank);
+      setTimeout(()=>setCelebrating(true),400);
+    } else if(!LS.get(lsKey)){LS.set(lsKey,rank.level);}
+  },[rank.level]);
+  return{celebrating,celebRank,dismiss:()=>setCelebrating(false)};
+}
+
+// ─── IronScoreCard ───
+function IronScoreCard({score,compact}){
+  const {xp,rank,nextRank,xpIntoRank,xpForNext,pct}=score;
+  if(compact){
+    return(
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:34,height:34,borderRadius:10,background:`linear-gradient(135deg,${rank.color}30,${rank.tierColor}15)`,border:`2px solid ${rank.color}60`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>
+          {rank.icon}
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:11,fontWeight:800,color:rank.color,lineHeight:1}}>{rank.name}</div>
+          <div style={{fontSize:9,color:V.text3,fontFamily:V.mono}}>{xp.toLocaleString()} XP</div>
+        </div>
+      </div>
+    );
+  }
+  return(
+    <div style={{background:`linear-gradient(135deg,${rank.color}12,${rank.tierColor}06)`,border:`1.5px solid ${rank.color}40`,borderRadius:16,padding:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:52,height:52,borderRadius:14,background:`linear-gradient(135deg,${rank.color}30,${rank.tierColor}15)`,border:`2.5px solid ${rank.color}70`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0,boxShadow:`0 0 16px ${rank.color}30`}}>
+            {rank.icon}
+          </div>
+          <div>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:rank.color,textTransform:"uppercase",opacity:.7}}>{rank.tier}</div>
+            <div style={{fontSize:18,fontWeight:900,color:rank.color,lineHeight:1.1}}>{rank.name}</div>
+            <div style={{fontSize:9,color:V.text3}}>Level {rank.level} of 30</div>
+          </div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:20,fontWeight:900,fontFamily:V.mono,color:rank.color}}>{xp.toLocaleString()}</div>
+          <div style={{fontSize:9,color:V.text3}}>IRON XP</div>
+        </div>
+      </div>
+      {xpForNext&&(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+            <span style={{fontSize:9,color:V.text3}}>→ {nextRank?.name}</span>
+            <span style={{fontSize:9,color:rank.color,fontWeight:700,fontFamily:V.mono}}>{xpIntoRank.toLocaleString()} / {xpForNext.toLocaleString()} XP ({pct}%)</span>
+          </div>
+          <div style={{width:"100%",height:6,borderRadius:3,background:"rgba(255,255,255,0.05)"}}>
+            <div style={{height:"100%",borderRadius:3,width:pct+"%",background:`linear-gradient(90deg,${rank.color},${rank.tierColor})`,transition:"width .5s"}}/>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MissionsPanel ───
+function MissionsPanel({missions,onClose}){
+  const [show,setShow]=useState(false);
+  const done=missions.filter(m=>m.done).length;
+  const totalXp=missions.filter(m=>m.done).reduce((a,m)=>a+m.xp,0);
+  return(
+    <>
+      <div onClick={()=>setShow(true)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:12,background:done===missions.length?"rgba(52,211,153,0.08)":"rgba(255,255,255,0.03)",border:`1px solid ${done===missions.length?"rgba(52,211,153,0.25)":V.cardBorder}`,cursor:"pointer"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:18}}>⚡</span>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:V.text}}>Daily Missions</div>
+            <div style={{fontSize:10,color:V.text3}}>{done}/{missions.length} complete · {totalXp} XP earned</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:3}}>
+          {missions.slice(0,5).map((m,i)=>(
+            <div key={i} style={{width:6,height:6,borderRadius:3,background:m.done?"#34d399":"rgba(255,255,255,0.12)"}}/>
+          ))}
+        </div>
+      </div>
+      {show&&ReactDOM.createPortal(
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:9990,background:"linear-gradient(180deg,#0a0a1a,#050508)",display:"flex",flexDirection:"column"}}>
+          <div className="sheet-head" style={{flexShrink:0,display:"flex",alignItems:"center",gap:12,paddingLeft:16,paddingRight:16,borderBottom:`1px solid ${V.cardBorder}`,background:"rgba(8,8,13,0.98)"}}>
+            <button onClick={()=>setShow(false)} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",cursor:"pointer",padding:"8px 4px",WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+              <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={V.accent} strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+              <span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span>
+            </button>
+            <h3 style={{margin:0,fontSize:16,color:V.text,fontFamily:V.font,fontWeight:700,flex:1,textAlign:"center",paddingRight:50}}>Daily Missions</h3>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:20}}>
+            <div style={{textAlign:"center",marginBottom:16}}>
+              <div style={{fontSize:11,color:V.text3,marginBottom:4}}>TODAY'S PROGRESS</div>
+              <div style={{fontSize:28,fontWeight:900,color:done===missions.length?"#34d399":V.accent,fontFamily:V.mono}}>{done}<span style={{fontSize:14,color:V.text3}}>/{missions.length}</span></div>
+              {done===missions.length&&<div style={{fontSize:12,color:"#34d399",fontWeight:700,marginTop:4}}>🎉 All missions complete!</div>}
+            </div>
+            <div style={{width:"100%",height:6,borderRadius:3,background:"rgba(255,255,255,0.05)",marginBottom:20}}>
+              <div style={{height:"100%",borderRadius:3,width:(done/missions.length*100)+"%",background:"linear-gradient(90deg,#34d399,#22d3ee)",transition:"width .4s"}}/>
+            </div>
+            {missions.map((m,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:12,background:m.done?"rgba(52,211,153,0.06)":"rgba(255,255,255,0.02)",border:`1px solid ${m.done?"rgba(52,211,153,0.2)":V.cardBorder}`,marginBottom:8,transition:"all .2s"}}>
+                <div style={{width:32,height:32,borderRadius:10,background:m.done?"rgba(52,211,153,0.15)":"rgba(255,255,255,0.05)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+                  {m.icon}
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:700,color:m.done?V.text:V.text2,textDecoration:m.done?"line-through":"none"}}>{m.title}</div>
+                  <div style={{fontSize:11,color:V.text3}}>{m.desc}</div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:12,fontWeight:800,color:m.done?"#34d399":V.accent,fontFamily:V.mono}}>+{m.xp}</div>
+                  <div style={{fontSize:8,color:V.text3}}>XP</div>
+                  {m.done&&<div style={{fontSize:14,marginTop:2}}>✓</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ─── Level-Up Celebration ───
+function LevelUpCelebration({rank,onDismiss}){
+  const [show,setShow]=useState(false);
+  useEffect(()=>{setTimeout(()=>setShow(true),50);},[]);
+  const dismiss=()=>{setShow(false);setTimeout(onDismiss,300);};
+  // Burst particles
+  const particles=Array.from({length:16},(_,i)=>({angle:i/16*360,color:[rank.color,"#fbbf24","#34d399","#60a5fa","#c084fc"][i%5]}));
+  return ReactDOM.createPortal(
+    <div onClick={dismiss} style={{position:"fixed",inset:0,zIndex:9998,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",opacity:show?1:0,transition:"opacity .3s",backdropFilter:"blur(4px)"}}>
+      {/* Particles */}
+      <div style={{position:"absolute",top:"50%",left:"50%",pointerEvents:"none"}}>
+        {show&&particles.map((p,i)=>{const rad=p.angle*Math.PI/180;const dist=80+Math.random()*60;return(
+          <div key={i} style={{position:"absolute",width:8,height:8,borderRadius:4,background:p.color,
+            transform:`translate(${Math.cos(rad)*dist}px, ${Math.sin(rad)*dist}px)`,
+            animation:"fadeUp .6s ease both",animationDelay:i*0.03+"s"}}/>
+        );})}
+      </div>
+      <div onClick={e=>e.stopPropagation()} style={{textAlign:"center",padding:"32px 28px",borderRadius:24,background:`linear-gradient(135deg,${rank.color}18,${rank.tierColor}08)`,border:`2px solid ${rank.color}50`,maxWidth:300,margin:"0 20px",position:"relative",zIndex:1}}>
+        <div style={{fontSize:56,marginBottom:8,lineHeight:1}}>{rank.icon}</div>
+        <div style={{fontSize:11,fontWeight:700,color:rank.color,textTransform:"uppercase",letterSpacing:2,marginBottom:4}}>Rank Up!</div>
+        <div style={{fontSize:26,fontWeight:900,color:rank.color,marginBottom:4}}>{rank.name}</div>
+        <div style={{fontSize:13,color:V.text3,marginBottom:4}}>{rank.tier} · Level {rank.level}</div>
+        <div style={{fontSize:11,color:V.text3,marginBottom:20}}>Tap anywhere to dismiss</div>
+        <div style={{padding:"10px 16px",borderRadius:10,background:`${rank.color}15`,border:`1px solid ${rank.color}30`}}>
+          <div style={{fontSize:10,color:V.text3,marginBottom:2}}>NEXT: {rank.level<30?"rank up at "+IRON_RANKS.find(r=>r.level===rank.level+1)?.xpNeeded.toLocaleString()+" XP":"MAX RANK"}</div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ─── Generalized UndoToast ───
+const UndoMgr={_fn:null,_timer:null,show:(msg,onUndo,accent)=>{if(UndoMgr._timer)clearTimeout(UndoMgr._timer);if(UndoMgr._fn)UndoMgr._fn({msg,onUndo,accent:accent||V.accent,ts:Date.now()});UndoMgr._timer=setTimeout(()=>{if(UndoMgr._fn)UndoMgr._fn(null);},5000);},clear:()=>{if(UndoMgr._timer)clearTimeout(UndoMgr._timer);if(UndoMgr._fn)UndoMgr._fn(null);}};
+function UndoToastBar(){
+  const [item,setItem]=useState(null);
+  UndoMgr._fn=setItem;
+  useEffect(()=>()=>{UndoMgr._fn=null;},[]);
+  if(!item)return null;
+  const age=(Date.now()-item.ts)/5000;
+  return ReactDOM.createPortal(
+    <div style={{position:"fixed",bottom:"calc(env(safe-area-inset-bottom,0px) + 88px)",left:16,right:16,zIndex:9997,display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderRadius:14,background:"rgba(20,20,32,0.97)",border:`1px solid ${item.accent}30`,backdropFilter:"blur(12px)",boxShadow:"0 4px 24px rgba(0,0,0,0.4)",animation:"fadeUp .25s ease"}}>
+      <span style={{fontSize:13,color:V.text,flex:1}}>{item.msg}</span>
+      <button onClick={()=>{item.onUndo();UndoMgr.clear();}} style={{padding:"6px 14px",borderRadius:8,background:`${item.accent}20`,border:`1px solid ${item.accent}40`,color:item.accent,fontSize:12,fontWeight:700,fontFamily:V.font,cursor:"pointer",flexShrink:0}}>Undo</button>
+    </div>,
+    document.body
+  );
+}
+
+
+const DEFAULT_LISTS=[
+  {id:"personal",label:"Personal",icon:"🙂",color:V.accent},
+  {id:"work",label:"Work",icon:"💼",color:V.blue2},
+  {id:"health",label:"Health",icon:"💊",color:V.green},
+  {id:"shopping",label:"Shopping",icon:"🛒",color:V.warn},
+  {id:"errands",label:"Errands",icon:"📍",color:V.pink},
+];
+const PRIORITIES=[{id:"high",label:"High",color:V.danger},{id:"medium",label:"Medium",color:V.warn},{id:"low",label:"Low",color:V.accent}];
+const RECURS=[{id:"none",label:"None"},{id:"daily",label:"Daily"},{id:"weekly",label:"Weekly"},{id:"monthly",label:"Monthly"}];
+
+// ─── Shared components ───
+const Card=({children,style:s={},onClick})=>(
+  <div onClick={onClick} style={{background:V.card,border:`1px solid ${V.cardBorder}`,borderRadius:16,padding:16,...(onClick?{cursor:"pointer"}:{}),...s}}>{children}</div>
+);
+const Btn=({children,v="primary",full,disabled,onClick,s:ex={}})=>{
+  const base={display:"flex",alignItems:"center",justifyContent:"center",gap:6,borderRadius:12,border:"none",fontSize:14,fontWeight:600,fontFamily:V.font,cursor:disabled?"default":"pointer",opacity:disabled?.4:1,WebkitTapHighlightColor:"transparent",minHeight:44,...(full?{width:"100%"}:{}),...ex};
+  const vars={
+    primary:{...base,background:`linear-gradient(135deg,${V.accent},${V.accent2})`,color:"#03090f",padding:"12px 20px"},
+    secondary:{...base,background:"rgba(255,255,255,0.05)",color:V.text2,padding:"12px 20px",border:`1px solid ${V.cardBorder}`},
+    danger:{...base,background:"rgba(248,113,113,0.12)",color:V.danger,padding:"12px 20px"},
+    ghost:{...base,background:"transparent",color:V.text3,padding:"8px 12px"},
+    small:{...base,background:`${V.accent}15`,color:V.accent,padding:"8px 14px",fontSize:12,borderRadius:10,minHeight:36},
+  };
+  return <button onClick={disabled?undefined:onClick} style={vars[v]||vars.primary}>{children}</button>;
+};
+const Field=({label,value,onChange,type="text",placeholder,autoFocus,rows})=>(
+  <div style={{marginBottom:12}}>
+    {label&&<div style={{fontSize:11,color:V.text3,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6,fontWeight:600}}>{label}</div>}
+    {rows?(
+      <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows} autoFocus={autoFocus}
+        style={{width:"100%",padding:"12px 14px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,borderRadius:12,color:V.text,fontSize:14,fontFamily:V.font,lineHeight:1.5,outline:"none",boxSizing:"border-box"}}/>
+    ):(
+      <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} autoFocus={autoFocus}
+        style={{width:"100%",padding:"12px 14px",background:"rgba(255,255,255,0.04)",border:`1px solid ${V.cardBorder}`,borderRadius:12,color:V.text,fontSize:16,fontFamily:V.font,outline:"none",boxSizing:"border-box",minHeight:44}}/>
+    )}
+  </div>
+);
+const Sheet=({title,onClose,children,footer})=>ReactDOM.createPortal(
+  <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:9990,background:V.sheetBg,display:"flex",flexDirection:"column"}} role="dialog">
+    <div className="sheet-head" style={{flexShrink:0,display:"flex",alignItems:"center",gap:12,paddingLeft:16,paddingRight:16,borderBottom:`1px solid ${V.cardBorder}`,background:V.sheetBg,zIndex:2}}>
+      <button onClick={onClose} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",cursor:"pointer",padding:"8px 4px",WebkitTapHighlightColor:"transparent",flexShrink:0}}>
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={V.accent} strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span style={{fontSize:14,color:V.accent,fontWeight:600}}>Back</span>
+      </button>
+      <h3 style={{margin:0,fontSize:16,color:V.text,fontFamily:V.font,fontWeight:700,flex:1,textAlign:"center",paddingRight:50}}>{title}</h3>
+    </div>
+    <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",padding:20}}>{children}</div>
+    {footer&&<div className="sheet-footer" style={{background:V.sheetBg}}>{footer}</div>}
+  </div>,
+  document.body
+);
+let _toastFn=null;
+const Toast={show:(msg,c=V.accent)=>{if(_toastFn)_toastFn({msg,c,id:Date.now()});}};
+function ToastDisplay(){
+  const [t,setT]=useState(null);_toastFn=setT;
+  useEffect(()=>{if(t){const tm=setTimeout(()=>setT(null),2200);return()=>clearTimeout(tm);}},[t]);
+  if(!t)return null;
+  return ReactDOM.createPortal(<div style={{position:"fixed",bottom:"calc(env(safe-area-inset-bottom,0px) + 88px)",left:"50%",transform:"translateX(-50%)",zIndex:9999,background:`${t.c}18`,border:`1px solid ${t.c}30`,borderRadius:12,padding:"10px 18px",backdropFilter:"blur(12px)",fontSize:13,fontWeight:600,color:t.c,whiteSpace:"nowrap",animation:"fadeUp .25s ease"}}>{t.msg}</div>,document.body);
+}
+let _confirmFn=null;
+const Confirm={show:(msg,sub,onOk)=>{if(_confirmFn)_confirmFn({msg,sub,onOk});}};
+function GlobalConfirm(){
+  const [c,setC]=useState(null);_confirmFn=setC;
+  if(!c)return null;
+  return ReactDOM.createPortal(<div style={{position:"fixed",inset:0,zIndex:9995,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",padding:16}}><div style={{width:"100%",background:V.bg,borderRadius:20,padding:24,border:`1px solid ${V.cardBorder}`}}><div style={{fontSize:17,fontWeight:700,color:V.text,marginBottom:6}}>{c.msg}</div>{c.sub&&<div style={{fontSize:13,color:V.text3,marginBottom:20}}>{c.sub}</div>}<div style={{display:"flex",gap:10}}><Btn v="secondary" full onClick={()=>setC(null)}>Cancel</Btn><Btn v="danger" full onClick={()=>{c.onOk();setC(null);}}>Delete</Btn></div></div></div>,document.body);
+}
+
+// ─── Quick-add bar ───
+function QuickAdd({lists,onAdd}){
+  const [text,setText]=useState("");
+  const [list,setList]=useState("personal");
+  const inp=useRef(null);
+  const submit=()=>{
+    if(!text.trim())return;
+    onAdd({id:uid(),title:text.trim(),list,priority:"medium",date:todayStr(),time:"",notes:"",recur:"none",done:false,createdAt:new Date().toISOString()});
+    setText("");Haptic.success();Toast.show("Reminder added ✓",V.accent);inp.current?.focus();
+  };
+  return(
+    <div style={{background:`${V.accent}06`,border:`1px solid ${V.accent}15`,borderRadius:14,padding:12,marginBottom:4}}>
+      <div style={{display:"flex",gap:8,marginBottom:8}}>
+        <input ref={inp} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Add a reminder..." autoComplete="off"
+          style={{flex:1,padding:"10px 14px",background:"rgba(255,255,255,0.05)",border:`1px solid ${V.cardBorder}`,borderRadius:10,color:V.text,fontSize:15,fontFamily:V.font,outline:"none",minHeight:44}}/>
+        <button onClick={submit} disabled={!text.trim()} style={{padding:"10px 16px",borderRadius:10,background:text.trim()?`linear-gradient(135deg,${V.accent},${V.accent2})`:"rgba(255,255,255,0.04)",border:"none",cursor:text.trim()?"pointer":"default",fontSize:20,lineHeight:1,opacity:text.trim()?1:.3}}>+</button>
+      </div>
+      <div style={{display:"flex",gap:5,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        {lists.map(l=>(
+          <button key={l.id} onClick={()=>setList(l.id)} style={{padding:"5px 10px",borderRadius:16,border:`1px solid ${list===l.id?l.color:V.cardBorder}`,background:list===l.id?`${l.color}15`:"transparent",color:list===l.id?l.color:V.text3,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",fontFamily:V.font}}>
+            {l.icon} {l.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Reminder row ───
+function ReminderRow({r,lists,onToggle,onDelete,onEdit}){
+  const overdue=isOverdue(r);
+  const listObj=lists.find(l=>l.id===r.list)||lists[0];
+  const priObj=PRIORITIES.find(p=>p.id===r.priority)||PRIORITIES[1];
+  const [pressed,setPressed]=useState(false);
+  return(
+    <div className="fade-up" style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 0",borderBottom:`1px solid rgba(56,189,248,0.04)`,opacity:r.done?.5:1,transition:"opacity .3s"}}>
+      {/* Checkbox */}
+      <button onClick={()=>{Haptic.light();onToggle(r.id);}} style={{width:24,height:24,borderRadius:7,border:`2px solid ${r.done?V.accent:priObj.color}`,background:r.done?V.accent:"transparent",cursor:"pointer",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
+        {r.done&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#03090f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+      </button>
+      {/* Content */}
+      <div style={{flex:1,minWidth:0}} onClick={()=>onEdit(r)}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+          <span style={{fontSize:14,fontWeight:600,color:r.done?V.text3:V.text,textDecoration:r.done?"line-through":"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"calc(100% - 50px)"}}>{r.title}</span>
+          {r.recur!=="none"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:6,background:`${V.blue2}15`,color:V.blue2,fontWeight:700,flexShrink:0}}>🔁</span>}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          {r.date&&<span style={{fontSize:10,color:overdue?V.danger:r.date===todayStr()?V.warn:V.text3,fontWeight:overdue||r.date===todayStr()?700:400}}>{overdue?"⚠️ ":""}{fmtDate(r.date)}{r.time?` · ${r.time}`:""}</span>}
+          <span style={{fontSize:10,color:listObj.color,fontWeight:600}}>{listObj.icon} {listObj.label}</span>
+        </div>
+        {r.notes&&<div style={{fontSize:11,color:V.text3,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.notes}</div>}
+      </div>
+      {/* Priority dot + delete */}
+      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+        <button onClick={()=>Confirm.show("Delete reminder?","",()=>onDelete(r.id))} style={{background:"none",border:"none",padding:4,cursor:"pointer",opacity:.4}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        </button>
+        <div style={{width:7,height:7,borderRadius:"50%",background:priObj.color,opacity:.8}}/>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add / Edit sheet ───
+function EditSheet({r,lists,onSave,onClose}){
+  const [form,setForm]=useState({title:r?.title||"",list:r?.list||"personal",priority:r?.priority||"medium",date:r?.date||todayStr(),time:r?.time||"",notes:r?.notes||"",recur:r?.recur||"none"});
+  const save=()=>{
+    if(!form.title.trim())return;
+    onSave({...r,...form,id:r?.id||uid(),done:r?.done||false,createdAt:r?.createdAt||new Date().toISOString()});
+    onClose();
+  };
+  return(
+    <Sheet title={r?"Edit Reminder":"New Reminder"} onClose={onClose} footer={<Btn full onClick={save} disabled={!form.title.trim()}>{r?"Save Changes":"Add Reminder"}</Btn>}>
+      <Field label="Title" value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="What do you need to do?" autoFocus/>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>List</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {lists.map(l=>(
+            <button key={l.id} onClick={()=>setForm(f=>({...f,list:l.id}))} style={{padding:"7px 12px",borderRadius:16,border:`1px solid ${form.list===l.id?l.color:V.cardBorder}`,background:form.list===l.id?`${l.color}15`:"transparent",color:form.list===l.id?l.color:V.text3,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:V.font}}>
+              {l.icon} {l.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Priority</div>
+        <div style={{display:"flex",gap:6}}>
+          {PRIORITIES.map(p=>(
+            <button key={p.id} onClick={()=>setForm(f=>({...f,priority:p.id}))} style={{flex:1,padding:"8px",borderRadius:10,border:`1px solid ${form.priority===p.id?p.color:V.cardBorder}`,background:form.priority===p.id?`${p.color}15`:"transparent",color:form.priority===p.id?p.color:V.text3,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:V.font}}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Field label="Date" type="date" value={form.date} onChange={v=>setForm(f=>({...f,date:v}))}/>
+        <Field label="Time" type="time" value={form.time} onChange={v=>setForm(f=>({...f,time:v}))}/>
+      </div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Repeat</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {RECURS.map(rec=>(
+            <button key={rec.id} onClick={()=>setForm(f=>({...f,recur:rec.id}))} style={{padding:"7px 14px",borderRadius:16,border:`1px solid ${form.recur===rec.id?V.accent:V.cardBorder}`,background:form.recur===rec.id?`${V.accent}12`:"transparent",color:form.recur===rec.id?V.accent:V.text3,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:V.font}}>
+              {rec.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <Field label="Notes (optional)" value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} rows={3} placeholder="Any extra details?"/>
+    </Sheet>
+  );
+}
+
+// ─── State ───
+const init={tab:"today",reminders:[],lists:[...DEFAULT_LISTS],loaded:false};
+function reducer(s,a){
+  switch(a.type){
+    case "INIT":return{...s,...a.p,loaded:true};
+    case "TAB":return{...s,tab:a.tab};
+    case "ADD":return{...s,reminders:[a.r,...s.reminders]};
+    case "UPDATE":return{...s,reminders:s.reminders.map(r=>r.id===a.r.id?a.r:r)};
+    case "TOGGLE":{
+      const r=s.reminders.find(x=>x.id===a.id);
+      if(!r)return s;
+      const done=!r.done;
+      let updated={...r,done,doneAt:done?new Date().toISOString():null};
+      if(done&&r.recur&&r.recur!=="none"&&r.date){
+        const d=new Date(r.date+"T12:00:00");
+        if(r.recur==="daily")d.setDate(d.getDate()+1);
+        else if(r.recur==="weekly")d.setDate(d.getDate()+7);
+        else if(r.recur==="monthly")d.setMonth(d.getMonth()+1);
+        const nextDate=d.toISOString().split("T")[0];
+        const next={...r,id:uid(),date:nextDate,done:false,doneAt:null,createdAt:new Date().toISOString()};
+        return{...s,reminders:[next,...s.reminders.map(x=>x.id===a.id?updated:x)]};
+      }
+      return{...s,reminders:s.reminders.map(x=>x.id===a.id?updated:x)};
+    }
+    case "DELETE":return{...s,reminders:s.reminders.filter(r=>r.id!==a.id)};
+    case "ADD_LIST":return{...s,lists:[...s.lists,a.list]};
+    case "DEL_LIST":return{...s,lists:s.lists.filter(l=>l.id!==a.id)};
+    default:return s;
+  }
+}
+
+// ─── TODAY TAB ───
+function TodayTab({s,d,score,missions}){
+  const [showEdit,setShowEdit]=useState(null);
+  const today=todayStr();
+  const overdue=s.reminders.filter(r=>!r.done&&isOverdue(r)).sort((a,b)=>a.date?.localeCompare(b.date||""));
+  const todayItems=s.reminders.filter(r=>!r.done&&r.date===today).sort((a,b)=>{const pa=PRIORITIES.findIndex(p=>p.id===a.priority);const pb=PRIORITIES.findIndex(p=>p.id===b.priority);return pa-pb;});
+  const doneToday=s.reminders.filter(r=>r.done&&r.doneAt&&r.doneAt.startsWith(today));
+  const completedPct=todayItems.length+doneToday.length>0?Math.round(doneToday.length/(todayItems.length+doneToday.length)*100):0;
+  const greet=(()=>{const h=new Date().getHours();if(h<12)return"Good morning";if(h<17)return"Good afternoon";return"Good evening";})();
+
+  return(
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:12,background:`${score.rank.color}10`,border:`1px solid ${score.rank.color}25`,cursor:"pointer"}}>
+        <IronScoreCard score={score} compact={true}/>
+        <div style={{marginLeft:"auto",fontSize:9,color:V.text3,textAlign:"right"}}>Level {score.rank.level}<br/>{score.pct}% to next</div>
+      </div>
+      <MissionsPanel missions={missions}/>
+
+      <QuickAdd lists={s.lists} onAdd={(r)=>d({type:"ADD",r})}/>
+
+      {/* Header */}
+      <div style={{padding:"10px 0 2px"}}>
+        <div style={{fontSize:20,fontWeight:800,color:V.text}}>{greet} 👋</div>
+        <div style={{fontSize:12,color:V.text3}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div>
+      </div>
+
+      {/* Progress */}
+      {(todayItems.length+doneToday.length)>0&&(
+        <div style={{padding:"12px 14px",borderRadius:12,background:`${V.accent}06`,border:`1px solid ${V.accent}15`}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:12,color:V.text2,fontWeight:600}}>Today's progress</span>
+            <span style={{fontSize:12,color:V.accent,fontWeight:700,fontFamily:V.mono}}>{doneToday.length}/{todayItems.length+doneToday.length}</span>
+          </div>
+          <div style={{width:"100%",height:6,borderRadius:3,background:"rgba(255,255,255,0.05)"}}>
+            <div style={{height:"100%",borderRadius:3,width:`${completedPct}%`,background:`linear-gradient(90deg,${V.accent},${V.accent2})`,transition:"width .5s"}}/>
+          </div>
+        </div>
+      )}
+
+      {/* Overdue */}
+      {overdue.length>0&&(
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:V.danger,letterSpacing:".06em",marginBottom:4}}>⚠️ OVERDUE ({overdue.length})</div>
+          {overdue.map(r=><ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>{d({type:"TOGGLE",id});Toast.show("Done! ✓",V.green);Haptic.success();}} onDelete={(id)=>d({type:"DELETE",id})} onEdit={(r)=>setShowEdit(r)}/>)}
+        </div>
+      )}
+
+      {/* Today items */}
+      {todayItems.length>0&&(
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:V.text3,letterSpacing:".06em",marginBottom:4}}>TODAY ({todayItems.length})</div>
+          {todayItems.map(r=><ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>{d({type:"TOGGLE",id});Toast.show("Done! ✓",V.green);Haptic.success();}} onDelete={(id)=>d({type:"DELETE",id})} onEdit={(r)=>setShowEdit(r)}/>)}
+        </div>
+      )}
+
+      {/* Completed today */}
+      {doneToday.length>0&&(
+        <div style={{opacity:.6}}>
+          <div style={{fontSize:10,fontWeight:700,color:V.text3,letterSpacing:".06em",marginBottom:4}}>COMPLETED ({doneToday.length})</div>
+          {doneToday.map(r=><ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>d({type:"TOGGLE",id})} onDelete={(id)=>d({type:"DELETE",id})} onEdit={(r)=>setShowEdit(r)}/>)}
+        </div>
+      )}
+
+      {overdue.length===0&&todayItems.length===0&&doneToday.length===0&&(
+        <div style={{textAlign:"center",padding:"40px 20px",color:V.text3}}>
+          <div style={{fontSize:48,marginBottom:12}}>✨</div>
+          <div style={{fontSize:15,fontWeight:600,color:V.text2,marginBottom:6}}>All clear!</div>
+          <div style={{fontSize:13}}>Nothing due today. Add a reminder above.</div>
+        </div>
+      )}
+
+      {showEdit&&<EditSheet r={showEdit} lists={s.lists} onSave={(updated)=>{d({type:"UPDATE",r:updated});Toast.show("Updated",V.accent);}} onClose={()=>setShowEdit(null)}/>}
+    </div>
+  );
+}
+
+// ─── UPCOMING TAB ───
+function UpcomingTab({s,d}){
+  const [showEdit,setShowEdit]=useState(null);
+  const [filterList,setFilterList]=useState("all");
+  const today=todayStr();
+  const upcoming=s.reminders.filter(r=>!r.done&&r.date>today).filter(r=>filterList==="all"||r.list===filterList).sort((a,b)=>a.date?.localeCompare(b.date||"")||0);
+  const noDate=s.reminders.filter(r=>!r.done&&!r.date).filter(r=>filterList==="all"||r.list===filterList);
+
+  // Group by date
+  const grouped=useMemo(()=>{
+    const map={};
+    upcoming.forEach(r=>{const key=r.date||"no-date";if(!map[key])map[key]=[];map[key].push(r);});
+    return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
+  },[upcoming]);
+
+  return(
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:12}}>
+      <QuickAdd lists={s.lists} onAdd={(r)=>d({type:"ADD",r})}/>
+
+      {/* List filter */}
+      <div style={{display:"flex",gap:5,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+        <button onClick={()=>setFilterList("all")} style={{padding:"6px 12px",borderRadius:16,border:"none",fontSize:11,fontWeight:600,fontFamily:V.font,cursor:"pointer",background:filterList==="all"?`${V.accent}15`:"rgba(255,255,255,0.04)",color:filterList==="all"?V.accent:V.text3,whiteSpace:"nowrap"}}>All</button>
+        {s.lists.map(l=>(
+          <button key={l.id} onClick={()=>setFilterList(filterList===l.id?"all":l.id)} style={{padding:"6px 12px",borderRadius:16,border:"none",fontSize:11,fontWeight:600,fontFamily:V.font,cursor:"pointer",background:filterList===l.id?`${l.color}15`:"rgba(255,255,255,0.04)",color:filterList===l.id?l.color:V.text3,whiteSpace:"nowrap"}}>
+            {l.icon} {l.label}
+          </button>
+        ))}
+      </div>
+
+      {grouped.map(([date,items])=>(
+        <div key={date}>
+          <div style={{fontSize:10,fontWeight:700,color:V.accent2,letterSpacing:".06em",marginBottom:4,textTransform:"uppercase"}}>{fmtFull(date)}</div>
+          {items.map(r=><ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>{d({type:"TOGGLE",id});Toast.show("Done! ✓",V.green);Haptic.success();}} onDelete={(id)=>d({type:"DELETE",id})} onEdit={(r)=>setShowEdit(r)}/>)}
+        </div>
+      ))}
+
+      {noDate.length>0&&(
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:V.text3,letterSpacing:".06em",marginBottom:4}}>SOMEDAY</div>
+          {noDate.map(r=><ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>{d({type:"TOGGLE",id});Toast.show("Done! ✓",V.green);Haptic.success();}} onDelete={(id)=>d({type:"DELETE",id})} onEdit={(r)=>setShowEdit(r)}/>)}
+        </div>
+      )}
+
+      {grouped.length===0&&noDate.length===0&&(
+        <div style={{textAlign:"center",padding:"40px 20px",color:V.text3}}>
+          <div style={{fontSize:48,marginBottom:12}}>📅</div>
+          <div style={{fontSize:15,fontWeight:600,color:V.text2,marginBottom:6}}>Nothing upcoming</div>
+          <div style={{fontSize:13}}>Reminders with future dates will appear here</div>
+        </div>
+      )}
+
+      {showEdit&&<EditSheet r={showEdit} lists={s.lists} onSave={(updated)=>{d({type:"UPDATE",r:updated});Toast.show("Updated",V.accent);}} onClose={()=>setShowEdit(null)}/>}
+    </div>
+  );
+}
+
+// ─── LISTS TAB ───
+function ListsTab({s,d}){
+  const [showEdit,setShowEdit]=useState(null);
+  const [showNew,setShowNew]=useState(false);
+  const [newList,setNewList]=useState({label:"",icon:"📝",color:V.accent});
+  const LIST_COLORS=[V.accent,"#60a5fa","#a78bfa","#f472b6","#34d399","#fbbf24","#f87171","#fb923c"];
+  const LIST_ICONS=["📝","💼","🏠","🛒","💊","🎯","📚","✈️","🎮","💪","🍔","🎵","🌱","🐾","🔧"];
+
+  return(
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:10}}>
+      {s.lists.map(list=>{
+        const count=s.reminders.filter(r=>r.list===list.id&&!r.done).length;
+        const done=s.reminders.filter(r=>r.list===list.id&&r.done).length;
+        return(
+          <div key={list.id} onClick={()=>setShowEdit({list,items:s.reminders.filter(r=>r.list===list.id)})} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderRadius:14,background:V.card,border:`1px solid ${V.cardBorder}`,cursor:"pointer"}}>
+            <div style={{width:40,height:40,borderRadius:12,background:`${list.color}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{list.icon}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700,color:V.text}}>{list.label}</div>
+              <div style={{fontSize:11,color:V.text3}}>{count} remaining · {done} done</div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              {count>0&&<div style={{minWidth:22,height:22,borderRadius:11,background:`${list.color}20`,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 6px"}}><span style={{fontSize:11,fontWeight:800,color:list.color,fontFamily:V.mono}}>{count}</span></div>}
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        );
+      })}
+
+      <Btn v="secondary" full onClick={()=>setShowNew(true)}>+ New List</Btn>
+
+      {showNew&&(
+        <Sheet title="New List" onClose={()=>setShowNew(false)} footer={<Btn full onClick={()=>{if(!newList.label.trim())return;d({type:"ADD_LIST",list:{id:uid(),...newList}});Toast.show("List created",V.accent);setShowNew(false);setNewList({label:"",icon:"📝",color:V.accent});}}>Create List</Btn>}>
+          <Field label="List Name" value={newList.label} onChange={v=>setNewList(l=>({...l,label:v}))} placeholder="e.g. Weekend plans" autoFocus/>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Icon</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {LIST_ICONS.map(ico=>(
+                <button key={ico} onClick={()=>setNewList(l=>({...l,icon:ico}))} style={{width:38,height:38,borderRadius:10,border:`2px solid ${newList.icon===ico?V.accent:V.cardBorder}`,background:newList.icon===ico?`${V.accent}15`:"rgba(255,255,255,0.03)",fontSize:18,cursor:"pointer"}}>{ico}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Color</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {LIST_COLORS.map(c=>(
+                <button key={c} onClick={()=>setNewList(l=>({...l,color:c}))} style={{width:32,height:32,borderRadius:8,background:c,border:`2px solid ${newList.color===c?"#fff":"transparent"}`,cursor:"pointer"}}/>
+              ))}
+            </div>
+          </div>
+        </Sheet>
+      )}
+
+      {showEdit&&(
+        <Sheet title={showEdit.list.label} onClose={()=>setShowEdit(null)}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontSize:13,color:V.text3}}>{showEdit.items.filter(r=>!r.done).length} remaining</div>
+            {!DEFAULT_LISTS.find(l=>l.id===showEdit.list.id)&&(
+              <Btn v="danger" s={{minHeight:32,padding:"6px 14px",fontSize:12}} onClick={()=>{Confirm.show(`Delete "${showEdit.list.label}"?`,"All reminders in this list will also be deleted.",()=>{d({type:"DEL_LIST",id:showEdit.list.id});setShowEdit(null);});}}>Delete List</Btn>
+            )}
+          </div>
+          {showEdit.items.filter(r=>!r.done).map(r=>(
+            <ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>{d({type:"TOGGLE",id});Toast.show("Done! ✓",V.green);}} onDelete={(id)=>d({type:"DELETE",id})} onEdit={()=>{}}/>
+          ))}
+          {showEdit.items.filter(r=>r.done).length>0&&(
+            <div style={{marginTop:12,opacity:.5}}>
+              <div style={{fontSize:10,color:V.text3,fontWeight:600,marginBottom:4}}>COMPLETED</div>
+              {showEdit.items.filter(r=>r.done).slice(0,5).map(r=>(
+                <ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>d({type:"TOGGLE",id})} onDelete={(id)=>d({type:"DELETE",id})} onEdit={()=>{}}/>
+              ))}
+            </div>
+          )}
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+// ─── DONE TAB ───
+function DoneTab({s,d}){
+  const done=s.reminders.filter(r=>r.done).sort((a,b)=>(b.doneAt||"").localeCompare(a.doneAt||""));
+  const clearAll=()=>Confirm.show("Clear completed?","All completed reminders will be permanently deleted.",()=>{done.forEach(r=>d({type:"DELETE",id:r.id}));Toast.show("Cleared",V.accent);});
+  return(
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:4}}>
+      {done.length>0&&(
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+          <div style={{fontSize:12,color:V.text3}}>{done.length} completed</div>
+          <Btn v="danger" s={{minHeight:32,padding:"6px 14px",fontSize:12}} onClick={clearAll}>Clear All</Btn>
+        </div>
+      )}
+      {done.map(r=><ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>d({type:"TOGGLE",id})} onDelete={(id)=>d({type:"DELETE",id})} onEdit={()=>{}}/>)}
+      {done.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:V.text3}}><div style={{fontSize:48,marginBottom:12}}>✅</div><div style={{fontSize:15,fontWeight:600,color:V.text2,marginBottom:6}}>No completed reminders</div><div style={{fontSize:13}}>Complete a reminder and it'll show up here</div></div>}
+    </div>
+  );
+}
+
+// ─── APP ───
+function App(){
+  const [s,d]=useReducer(reducer,init);
+
+  const score=useMemo(()=>calcScore(s),[s.reminders,s.lists]);
+  const missions=useMemo(()=>getDailyMissions(s),[s.reminders,s.lists]);
+  const {celebrating,celebRank,dismiss:dismissLevel}=useLevelUp(score,"rl-last-level");
+  useEffect(()=>{
+    const reminders=LS.get("rl-reminders")||[];
+    const lists=LS.get("rl-lists")||DEFAULT_LISTS;
+    d({type:"INIT",p:{reminders,lists}});
+  },[]);
+  useEffect(()=>{
+    if(!s.loaded)return;
+    LS.set("rl-reminders",s.reminders);LS.set("rl-lists",s.lists);
+  },[s.reminders,s.lists,s.loaded]);
+
+  if(!s.loaded)return<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:V.bg,flexDirection:"column",gap:12}}><div style={{fontSize:36}}>🔔</div><div style={{fontSize:11,color:V.text3,fontFamily:V.mono,animation:"pulse 1.5s infinite"}}>Loading...</div></div>;
+
+  const overdueCount=s.reminders.filter(r=>!r.done&&isOverdue(r)).length;
+  const todayCount=s.reminders.filter(r=>!r.done&&r.date===todayStr()).length;
+  const tabs=[
+    {id:"today",label:"Today",icon:"🏠",badge:overdueCount>0?overdueCount:todayCount>0?todayCount:0,badgeColor:overdueCount>0?V.danger:V.accent},
+    {id:"upcoming",label:"Upcoming",icon:"📅",badge:0},
+    {id:"lists",label:"Lists",icon:"📋",badge:0},
+    {id:"done",label:"Done",icon:"✅",badge:0},
+  ];
+
+  return(
+    <div style={{height:"100%",display:"flex",flexDirection:"column",background:V.bg}}>
+      <div style={{paddingTop:`max(16px,env(safe-area-inset-top,0px))`,paddingLeft:16,paddingRight:16,paddingBottom:10,background:V.navBg,borderBottom:`1px solid ${V.cardBorder}`,flexShrink:0,backdropFilter:"blur(12px)"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:22}}>🔔</span>
+            <div>
+              <div style={{fontSize:16,fontWeight:800,color:V.text,lineHeight:1}}>ReminderLog</div>
+              <div style={{fontSize:9,color:V.text3,fontWeight:600,letterSpacing:".1em"}}>by IRONLOG</div>
+            </div>
+          </div>
+          {overdueCount>0&&<div style={{padding:"4px 10px",borderRadius:20,background:`${V.danger}20`,border:`1px solid ${V.danger}30`}}><span style={{fontSize:11,fontWeight:800,color:V.danger}}>{overdueCount} overdue</span></div>}
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}}>
+        <div className="main-scroll" style={{paddingTop:16}}>
+          {s.tab==="today"&&<TodayTab s={s} d={d} score={score} missions={missions}/>}
+          {s.tab==="upcoming"&&<UpcomingTab s={s} d={d}/>}
+          {s.tab==="lists"&&<ListsTab s={s} d={d}/>}
+          {s.tab==="done"&&<DoneTab s={s} d={d}/>}
+        </div>
+      </div>
+      <div className="tab-bar" style={{background:V.navBg,borderTop:`1px solid ${V.cardBorder}`,display:"flex",backdropFilter:"blur(12px)",flexShrink:0,paddingTop:8}}>
+        {tabs.map(tab=>{
+          const active=s.tab===tab.id;
+          return(
+            <button key={tab.id} onClick={()=>{Haptic.light();d({type:"TAB",tab:tab.id});}} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,background:"none",border:"none",cursor:"pointer",padding:"4px 0",WebkitTapHighlightColor:"transparent",position:"relative"}}>
+              <span style={{fontSize:18,opacity:active?1:.5}}>{tab.icon}</span>
+              <span style={{fontSize:9,fontWeight:active?700:500,color:active?V.accent:V.text3}}>{tab.label}</span>
+              {active&&<div style={{width:4,height:4,borderRadius:2,background:V.accent,marginTop:-2}}/>}
+              {tab.badge>0&&!active&&<div style={{position:"absolute",top:0,right:"calc(50% - 14px)",minWidth:16,height:16,borderRadius:8,background:tab.badgeColor||V.accent,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}><span style={{fontSize:9,fontWeight:800,color:"#03090f",fontFamily:V.mono}}>{tab.badge}</span></div>}
+            </button>
+          );
+        })}
+      </div>
+      <ToastDisplay/><GlobalConfirm/><UndoToastBar/>{celebrating&&celebRank&&<LevelUpCelebration rank={celebRank} onDismiss={dismissLevel}/>}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
