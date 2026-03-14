@@ -44,17 +44,20 @@ textarea{resize:none;outline:none}
 <div id="root"><div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;color:#38bdf8"><div style="font-size:32px">🔔</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;opacity:.5">Loading...</div></div></div>
 <script>
 var loadStatus={};
+var loadLog=[];
 function loadScript(url,name){
+  loadLog.push('Loading '+name+' from '+url);
   return new Promise(function(resolve,reject){
     var s=document.createElement('script');s.src=url;s.crossOrigin='anonymous';
-    s.onload=function(){loadStatus[name]='ok';resolve();};
-    s.onerror=function(){loadStatus[name]='FAILED';reject(new Error(name+' failed from '+url));};
+    s.onload=function(){loadStatus[name]='ok';loadLog.push(name+' loaded OK');resolve();};
+    s.onerror=function(){loadStatus[name]='FAILED';loadLog.push(name+' FAILED from '+url);reject(new Error(name+' failed'));};
     document.head.appendChild(s);
   });
 }
 function showError(msg){
-  document.getElementById('root').innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;gap:12px;background:#03090f"><div style="font-size:28px">🚫</div><div style="color:#f87171;font-family:monospace;font-size:13px;line-height:1.6;max-width:320px">'+msg+'</div><div style="color:#64748b;font-size:11px">Check your internet connection and reload</div></div>';
+  document.getElementById('root').innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;gap:12px;background:#03090f"><div style="font-size:28px">🚫</div><div style="color:#f87171;font-family:monospace;font-size:13px;line-height:1.6;max-width:320px;word-break:break-all">'+msg+'</div><div style="color:#64748b;font-size:11px;margin-top:8px;white-space:pre-line">'+loadLog.join('\n')+'</div></div>';
 }
+window.onerror=function(msg,src,line,col,err){showError('Runtime: '+msg+' (line '+line+')');return true;};
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(function(){});}
 (function(){
   loadScript('https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js','React')
@@ -65,22 +68,29 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').cat
   })
   .then(function(){
     return loadScript('https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js','Recharts')
-    .catch(function(){return loadScript('https://unpkg.com/recharts@2.5.0/umd/Recharts.js','Recharts');});
+    .catch(function(){
+      return loadScript('https://unpkg.com/recharts@2.5.0/umd/Recharts.js','Recharts')
+      .catch(function(){loadLog.push('Recharts skipped (optional)');});
+    });
   })
   .then(function(){
     return loadScript('https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.0/babel.min.js','Babel')
     .catch(function(){return loadScript('https://unpkg.com/@babel/standalone@7.24.0/babel.min.js','Babel');});
   })
   .then(function(){
+    loadLog.push('All scripts loaded. Compiling...');
     if(typeof React==='undefined')throw new Error('React not available');
     if(typeof Babel==='undefined')throw new Error('Babel not available');
     var src=document.getElementById('app-src');
     if(!src)throw new Error('App source not found');
     var compiled;
-    try{compiled=Babel.transform(src.textContent,{presets:['react'],plugins:[]}).code;}catch(e){throw new Error('Compile error: '+e.message);}
-    var script=document.createElement('script');script.textContent='try{'+compiled+'}catch(e){document.getElementById("root").innerHTML="<div style=\\"display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;gap:12px;background:#03090f\\"><div style=\\"font-size:28px\\">🚫</div><div style=\\"color:#f87171;font-family:monospace;font-size:13px;line-height:1.6;max-width:320px;word-break:break-all\\">"+e.message+"</div></div>";}';document.body.appendChild(script);
+    try{compiled=Babel.transform(src.textContent,{presets:['react'],plugins:[]}).code;}catch(e){throw new Error('Compile: '+e.message);}
+    loadLog.push('Compiled OK ('+compiled.length+' chars). Executing...');
+    var fn=new Function(compiled);
+    fn();
+    loadLog.push('App started!');
   })
-  .catch(function(e){showError(e.message);});
+  .catch(function(e){showError(e.message||String(e));});
 })();
 </script>
 <script type="text/plain" id="app-src">
