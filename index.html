@@ -78,14 +78,15 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').cat
     if(!src)throw new Error('App source not found');
     var compiled;
     try{compiled=Babel.transform(src.textContent,{presets:['react'],plugins:[]}).code;}catch(e){throw new Error('Compile error: '+e.message);}
-    var script=document.createElement('script');script.textContent=compiled;document.body.appendChild(script);
+    var script=document.createElement('script');script.textContent='try{'+compiled+'}catch(e){document.getElementById("root").innerHTML="<div style=\\"display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;gap:12px;background:#03090f\\"><div style=\\"font-size:28px\\">🚫</div><div style=\\"color:#f87171;font-family:monospace;font-size:13px;line-height:1.6;max-width:320px;word-break:break-all\\">"+e.message+"</div></div>";}';document.body.appendChild(script);
   })
   .catch(function(e){showError(e.message);});
 })();
 </script>
 <script type="text/plain" id="app-src">
 const{useState,useEffect,useReducer,useCallback,useMemo,useRef}=React;
-const{BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,PieChart,Pie,Cell,LineChart,Line}=Recharts;
+const RC=typeof Recharts!=="undefined"?Recharts:{};
+const{BarChart=()=>null,Bar=()=>null,XAxis=()=>null,YAxis=()=>null,Tooltip:RTooltip=()=>null,ResponsiveContainer=({children})=>children,PieChart=()=>null,Pie=()=>null,Cell=()=>null,LineChart=()=>null,Line=()=>null}=RC;
 
 // ─── Utilities ───
 const LS={get:(k)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
@@ -309,7 +310,7 @@ function MissionsPanel({missions}){
       {open&&(
         <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:4}}>
           {missions.map((m,i)=>(
-            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:m.done?`${V.green}08`:"rgba(255,255,255,0.02)",border:`1px solid ${m.done?V.green+"20":V.cardBorder}`,opacity:m.done?.7:1}}>
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:m.done?`${V.green}08`:"rgba(255,255,255,0.02)",border:`1px solid ${m.done?V.green+"20":V.cardBorder}`,opacity:m.done?0.7:1}}>
               <span style={{fontSize:16}}>{m.icon}</span>
               <div style={{flex:1}}>
                 <div style={{fontSize:12,fontWeight:600,color:m.done?V.green:V.text}}>{m.title}</div>
@@ -387,7 +388,7 @@ const Card=({children,style:s={},onClick})=>(
   <div onClick={onClick} style={{background:V.card,border:"1px solid "+V.cardBorder,borderRadius:16,padding:16,...(onClick?{cursor:"pointer"}:{}),...s}}>{children}</div>
 );
 const Btn=({children,v="primary",full,disabled,onClick,s:ex={}})=>{
-  const base={display:"flex",alignItems:"center",justifyContent:"center",gap:6,borderRadius:12,border:"none",fontSize:14,fontWeight:600,fontFamily:V.font,cursor:disabled?"default":"pointer",opacity:disabled?.4:1,WebkitTapHighlightColor:"transparent",minHeight:44,...(full?{width:"100%"}:{}),...ex};
+  const base={display:"flex",alignItems:"center",justifyContent:"center",gap:6,borderRadius:12,border:"none",fontSize:14,fontWeight:600,fontFamily:V.font,cursor:disabled?"default":"pointer",opacity:disabled?0.4:1,WebkitTapHighlightColor:"transparent",minHeight:44,...(full?{width:"100%"}:{}),...ex};
   const vars={
     primary:{...base,background:"linear-gradient(135deg,"+V.accent+","+V.accent2+")",color:"#03090f",padding:"12px 20px"},
     secondary:{...base,background:"rgba(255,255,255,0.05)",color:V.text2,padding:"12px 20px",border:"1px solid "+V.cardBorder},
@@ -544,7 +545,7 @@ function ReminderRow({r,lists,onToggle,onDelete,onEdit,onSnooze,bulkMode,selecte
       {/* Swipe indicators */}
       {swiped>20&&<div style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:11,color:V.green,fontWeight:700}}>Complete</div>}
       {swiped<-20&&<div style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",fontSize:11,color:V.danger,fontWeight:700}}>Delete</div>}
-      <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 4px",borderBottom:"1px solid rgba(56,189,248,0.04)",opacity:r.done?.5:1,transition:"opacity .3s,transform .15s",transform:"translateX("+swiped+"px)"}}>
+      <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 4px",borderBottom:"1px solid rgba(56,189,248,0.04)",opacity:r.done?0.5:1,transition:"opacity .3s,transform .15s",transform:"translateX("+swiped+"px)"}}>
         {bulkMode?(
           <button onClick={()=>onSelect(r.id)} style={{width:24,height:24,borderRadius:7,border:"2px solid "+(selected?V.accent:V.text3),background:selected?V.accent:"transparent",cursor:"pointer",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
             {selected&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#03090f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
@@ -919,7 +920,7 @@ function StatsTab({s}){
             <BarChart data={chartData} barGap={2}>
               <XAxis dataKey="name" tick={{fontSize:9,fill:V.text3}} axisLine={false} tickLine={false} interval={2}/>
               <YAxis tick={{fontSize:9,fill:V.text3}} axisLine={false} tickLine={false} width={20} allowDecimals={false}/>
-              <Tooltip contentStyle={{background:V.bg,border:"1px solid "+V.cardBorder,borderRadius:8,fontSize:11,color:V.text}}/>
+              <RTooltip contentStyle={{background:V.bg,border:"1px solid "+V.cardBorder,borderRadius:8,fontSize:11,color:V.text}}/>
               <Bar dataKey="completed" fill={V.green} radius={[3,3,0,0]} name="Completed"/>
               <Bar dataKey="added" fill={V.accent} radius={[3,3,0,0]} name="Added"/>
             </BarChart>
@@ -962,7 +963,7 @@ function StatsTab({s}){
                   <Pie data={byPriority} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={4} dataKey="value">
                     {byPriority.map((entry,i)=><Cell key={i} fill={entry.color}/>)}
                   </Pie>
-                  <Tooltip contentStyle={{background:V.bg,border:"1px solid "+V.cardBorder,borderRadius:8,fontSize:11,color:V.text}}/>
+                  <RTooltip contentStyle={{background:V.bg,border:"1px solid "+V.cardBorder,borderRadius:8,fontSize:11,color:V.text}}/>
                 </PieChart>
               </ResponsiveContainer>
             </div>
