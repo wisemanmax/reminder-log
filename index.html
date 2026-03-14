@@ -73,6 +73,8 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').cat
   })
   .then(function(){
     if(typeof React==='undefined')throw new Error('React not available');
+    if(typeof ReactDOM==='undefined')throw new Error('ReactDOM not available');
+    if(typeof Recharts==='undefined')throw new Error('Recharts not available');
     if(typeof Babel==='undefined')throw new Error('Babel not available');
     var src=document.getElementById('app-src');
     if(!src)throw new Error('App source not found');
