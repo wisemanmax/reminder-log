@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -31,8 +30,9 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
 @keyframes slideOut{from{transform:translateX(0)}to{transform:translateX(100%)}}
 @keyframes scaleIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}
-@keyframes confetti{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(400px) rotate(720deg);opacity:0}}
+@keyframes badgePop{0%{transform:scale(0.6);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
 .fade-up{animation:fadeUp .25s ease both}
+.badge-pop{animation:badgePop .3s ease both}
 textarea{resize:none;outline:none}
 @media(orientation:landscape) and (max-height:500px){#root{display:none!important}#landscape-lock{display:flex!important}}
 #landscape-lock{display:none;position:fixed;inset:0;background:#08080d;z-index:99999;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:'Outfit',sans-serif;color:#94a3b8;font-size:14px;text-align:center;padding:20px}
@@ -119,302 +119,353 @@ const hasCharts=typeof Recharts!=='undefined';
 // ─── Utilities ───
 const LS={get:(k)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
-const todayStr=()=>new Date().toISOString().split(“T”)[0];
-const nowStr=()=>{const d=new Date();return d.getHours().toString().padStart(2,“0”)+”:”+d.getMinutes().toString().padStart(2,“0”);};
-const fmtDate=(d)=>{if(!d)return””;try{const dt=new Date(d+“T12:00:00”);const today=new Date();today.setHours(0,0,0,0);const diff=Math.round((dt-today)/86400000);if(diff===0)return”Today”;if(diff===1)return”Tomorrow”;if(diff===-1)return”Yesterday”;if(diff>0&&diff<7)return dt.toLocaleDateString(“en-US”,{weekday:“short”});return dt.toLocaleDateString(“en-US”,{month:“short”,day:“numeric”});}catch(e){return d;}};
-const fmtFull=(d)=>{try{return new Date(d+“T12:00:00”).toLocaleDateString(“en-US”,{weekday:“short”,month:“short”,day:“numeric”});}catch(e){return d;}};
+const todayStr=()=>new Date().toISOString().split("T")[0];
+const nowStr=()=>{const d=new Date();return d.getHours().toString().padStart(2,"0")+":"+d.getMinutes().toString().padStart(2,"0");};
+const fmtDate=(d)=>{if(!d)return"";try{const dt=new Date(d+"T12:00:00");const today=new Date();today.setHours(0,0,0,0);const diff=Math.round((dt-today)/86400000);if(diff===0)return"Today";if(diff===1)return"Tomorrow";if(diff===-1)return"Yesterday";if(diff>0&&diff<7)return dt.toLocaleDateString("en-US",{weekday:"short"});return dt.toLocaleDateString("en-US",{month:"short",day:"numeric"});}catch(e){return d;}};
+const fmtFull=(d)=>{try{return new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});}catch(e){return d;}};
 const isOverdue=(r)=>{if(r.done||!r.date)return false;return r.date<todayStr();};
 const isToday=(r)=>r.date===todayStr();
-const isTomorrow=(r)=>{const d=new Date();d.setDate(d.getDate()+1);return r.date===d.toISOString().split(“T”)[0];};
-const daysFromNow=(n)=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().split(“T”)[0];};
-const Haptic={light:()=>{try{if(navigator.vibrate)navigator.vibrate(10);}catch(e){}},success:()=>{try{if(navigator.vibrate)navigator.vibrate([10,30,10]);}catch(e){}},};
+const isTomorrow=(r)=>{const d=new Date();d.setDate(d.getDate()+1);return r.date===d.toISOString().split("T")[0];};
+const daysFromNow=(n)=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().split("T")[0];};
+const overdueByDays=(r)=>{
+  if(!isOverdue(r))return 0;
+  const t=new Date();t.setHours(0,0,0,0);
+  return Math.round((t-new Date(r.date+"T12:00:00"))/86400000);
+};
+const dueDiffDays=(r)=>{
+  if(!r.date)return null;
+  const t=new Date();t.setHours(0,0,0,0);
+  return Math.round((new Date(r.date+"T12:00:00")-t)/86400000);
+};
+// ─── ENHANCEMENT 1: Haptic patterns per priority ───
+const Haptic={
+  light:()=>{try{if(navigator.vibrate)navigator.vibrate(10);}catch(e){}},
+  success:()=>{try{if(navigator.vibrate)navigator.vibrate([10,30,10]);}catch(e){}},
+  error:()=>{try{if(navigator.vibrate)navigator.vibrate([30,20,30]);}catch(e){}},
+  priority:(p)=>{
+    try{
+      if(!navigator.vibrate)return;
+      if(p==="high")navigator.vibrate([20,40,20,40,30]);    // urgent triple-tap
+      else if(p==="medium")navigator.vibrate([12,30,12]);   // clean double-tap
+      else navigator.vibrate([8]);                           // single soft
+    }catch(e){}
+  },
+};
 
-// ─── Theme ───
-const DARK={
-bg:”#03090f”,card:“rgba(56,189,248,0.04)”,cardBorder:“rgba(56,189,248,0.1)”,
-accent:”#38bdf8”,accent2:”#7dd3fc”,blue2:”#60a5fa”,purple:”#a78bfa”,
-danger:”#f87171”,warn:”#fbbf24”,green:”#34d399”,pink:”#f472b6”,
-text:”#e0f2fe”,text2:”#7dd3fc”,text3:”#2d5a72”,
-font:”‘Outfit’,sans-serif”,mono:”‘JetBrains Mono’,monospace”,
-sheetBg:“linear-gradient(180deg,#080f1a,#03090f)”,navBg:“rgba(3,9,15,0.96)”,mode:“dark”
+// ─── ENHANCEMENT 2: Accent themes ───
+const ACCENT_THEMES=[
+  {id:"ocean",   name:"Ocean",   icon:"🌊", accent:"#38bdf8",accent2:"#7dd3fc",blue2:"#60a5fa",purple:"#a78bfa",green:"#34d399",pink:"#f472b6",warn:"#fbbf24",danger:"#f87171"},
+  {id:"sunset",  name:"Sunset",  icon:"🌅", accent:"#fb923c",accent2:"#fdba74",blue2:"#f97316",purple:"#f472b6",green:"#34d399",pink:"#fb923c",warn:"#fbbf24",danger:"#f87171"},
+  {id:"forest",  name:"Forest",  icon:"🌿", accent:"#34d399",accent2:"#6ee7b7",blue2:"#4ade80",purple:"#a78bfa",green:"#86efac",pink:"#f472b6",warn:"#fbbf24",danger:"#f87171"},
+  {id:"candy",   name:"Candy",   icon:"🍬", accent:"#f472b6",accent2:"#f9a8d4",blue2:"#c084fc",purple:"#e879f9",green:"#34d399",pink:"#e879f9",warn:"#fbbf24",danger:"#f87171"},
+  {id:"midnight",name:"Midnight",icon:"🌙", accent:"#818cf8",accent2:"#a5b4fc",blue2:"#6366f1",purple:"#c084fc",green:"#34d399",pink:"#f472b6",warn:"#fbbf24",danger:"#f87171"},
+  {id:"neon",    name:"Neon",    icon:"⚡", accent:"#a3e635",accent2:"#bef264",blue2:"#4ade80",purple:"#e879f9",green:"#4ade80",pink:"#e879f9",warn:"#fde047",danger:"#f87171"},
+];
+const DARK_BASE={
+  bg:"#03090f",text:"#e0f2fe",text2:"#7dd3fc",text3:"#2d5a72",
+  font:"'Outfit',sans-serif",mono:"'JetBrains Mono',monospace",
+  sheetBg:"linear-gradient(180deg,#080f1a,#03090f)",navBg:"rgba(3,9,15,0.96)",mode:"dark"
 };
-const LIGHT={
-bg:”#f0f9ff”,card:“rgba(14,165,233,0.04)”,cardBorder:“rgba(14,165,233,0.12)”,
-accent:”#0284c7”,accent2:”#0369a1”,blue2:”#1d4ed8”,purple:”#7c3aed”,
-danger:”#dc2626”,warn:”#d97706”,green:”#16a34a”,pink:”#db2777”,
-text:”#0c4a6e”,text2:”#0369a1”,text3:”#64748b”,
-font:”‘Outfit’,sans-serif”,mono:”‘JetBrains Mono’,monospace”,
-sheetBg:“linear-gradient(180deg,#ffffff,#f0f9ff)”,navBg:“rgba(240,249,255,0.97)”,mode:“light”
+const LIGHT_BASE={
+  bg:"#f0f9ff",text:"#0c4a6e",text2:"#0369a1",text3:"#64748b",
+  font:"'Outfit',sans-serif",mono:"'JetBrains Mono',monospace",
+  sheetBg:"linear-gradient(180deg,#ffffff,#f0f9ff)",navBg:"rgba(240,249,255,0.97)",mode:"light"
 };
-const V={…(LS.get(“rl-theme”)===“light”?LIGHT:DARK)};
-/* FIX 3: setTheme now accepts an optional callback so App can forceUpdate after theme change */
-const setTheme=(m,onDone)=>{const t=m===“light”?LIGHT:DARK;Object.assign(V,t);LS.set(“rl-theme”,m);document.body.style.background=V.bg;document.body.style.color=V.text;const mc=document.querySelector(‘meta[name=“theme-color”]’);if(mc)mc.setAttribute(“content”,V.bg);if(onDone)onDone();};
+function buildTheme(mode,accentId){
+  const base=mode==="light"?LIGHT_BASE:DARK_BASE;
+  const acc=ACCENT_THEMES.find(a=>a.id===accentId)||ACCENT_THEMES[0];
+  const card=mode==="light"?"rgba(14,165,233,0.04)":acc.accent+"06";
+  const cardBorder=mode==="light"?"rgba(14,165,233,0.12)":acc.accent+"18";
+  return{...base,...acc,card,cardBorder,accentId:acc.id};
+}
+const _savedMode=LS.get("rl-theme")||"dark";
+const _savedAccent=LS.get("rl-accent")||"ocean";
+const V={...buildTheme(_savedMode,_savedAccent)};
+/* setTheme now handles both mode and accent */
+const setTheme=(mode,accentId,onDone)=>{
+  const t=buildTheme(mode||V.mode,accentId||V.accentId);
+  Object.assign(V,t);
+  LS.set("rl-theme",V.mode);
+  LS.set("rl-accent",V.accentId);
+  document.body.style.background=V.bg;
+  document.body.style.color=V.text;
+  const mc=document.querySelector('meta[name="theme-color"]');
+  if(mc)mc.setAttribute("content",V.bg);
+  if(onDone)onDone();
+};
 
 // ─── IRON_RANKS ───
 const IRON_RANKS=[
-{level:1,tier:“Bronze”,name:“Bronze I”,icon:“🥉”,xpNeeded:0,color:”#cd7f32”,tierColor:”#cd7f32”},
-{level:2,tier:“Bronze”,name:“Bronze II”,icon:“🥉”,xpNeeded:200,color:”#c87533”,tierColor:”#cd7f32”},
-{level:3,tier:“Bronze”,name:“Bronze III”,icon:“🥉”,xpNeeded:500,color:”#b87333”,tierColor:”#cd7f32”},
-{level:4,tier:“Silver”,name:“Silver I”,icon:“🥈”,xpNeeded:1000,color:”#94a3b8”,tierColor:”#c0c0c0”},
-{level:5,tier:“Silver”,name:“Silver II”,icon:“🥈”,xpNeeded:1800,color:”#c0c0c0”,tierColor:”#c0c0c0”},
-{level:6,tier:“Silver”,name:“Silver III”,icon:“🥈”,xpNeeded:2800,color:”#e2e8f0”,tierColor:”#c0c0c0”},
-{level:7,tier:“Gold”,name:“Gold I”,icon:“🥇”,xpNeeded:4000,color:”#fbbf24”,tierColor:”#f59e0b”},
-{level:8,tier:“Gold”,name:“Gold II”,icon:“🥇”,xpNeeded:5500,color:”#f59e0b”,tierColor:”#f59e0b”},
-{level:9,tier:“Gold”,name:“Gold III”,icon:“🥇”,xpNeeded:7500,color:”#d97706”,tierColor:”#f59e0b”},
-{level:10,tier:“Platinum”,name:“Platinum I”,icon:“💠”,xpNeeded:10000,color:”#67e8f9”,tierColor:”#22d3ee”},
-{level:11,tier:“Platinum”,name:“Platinum II”,icon:“💠”,xpNeeded:13000,color:”#22d3ee”,tierColor:”#22d3ee”},
-{level:12,tier:“Platinum”,name:“Platinum III”,icon:“💠”,xpNeeded:17000,color:”#06b6d4”,tierColor:”#22d3ee”},
-{level:13,tier:“Diamond”,name:“Diamond I”,icon:“💎”,xpNeeded:22000,color:”#a5b4fc”,tierColor:”#6366f1”},
-{level:14,tier:“Diamond”,name:“Diamond II”,icon:“💎”,xpNeeded:28000,color:”#6366f1”,tierColor:”#6366f1”},
-{level:15,tier:“Diamond”,name:“Diamond III”,icon:“💎”,xpNeeded:35000,color:”#4f46e5”,tierColor:”#6366f1”},
-{level:16,tier:“Master”,name:“Master I”,icon:“⚔️”,xpNeeded:43000,color:”#f87171”,tierColor:”#f43f5e”},
-{level:17,tier:“Master”,name:“Master II”,icon:“⚔️”,xpNeeded:52000,color:”#f43f5e”,tierColor:”#f43f5e”},
-{level:18,tier:“Master”,name:“Master III”,icon:“⚔️”,xpNeeded:63000,color:”#e11d48”,tierColor:”#f43f5e”},
-{level:19,tier:“Grandmaster”,name:“Grandmaster I”,icon:“👑”,xpNeeded:76000,color:”#f9a8d4”,tierColor:”#ec4899”},
-{level:20,tier:“Grandmaster”,name:“Grandmaster II”,icon:“👑”,xpNeeded:91000,color:”#ec4899”,tierColor:”#ec4899”},
-{level:21,tier:“Grandmaster”,name:“Grandmaster III”,icon:“👑”,xpNeeded:108000,color:”#db2777”,tierColor:”#ec4899”},
-{level:22,tier:“Champion”,name:“Champion I”,icon:“🏆”,xpNeeded:128000,color:”#fb923c”,tierColor:”#f97316”},
-{level:23,tier:“Champion”,name:“Champion II”,icon:“🏆”,xpNeeded:150000,color:”#f97316”,tierColor:”#f97316”},
-{level:24,tier:“Champion”,name:“Champion III”,icon:“🏆”,xpNeeded:175000,color:”#ea580c”,tierColor:”#f97316”},
-{level:25,tier:“Iron Legend”,name:“Iron Legend I”,icon:“⚜️”,xpNeeded:205000,color:”#34d399”,tierColor:”#10b981”},
-{level:26,tier:“Iron Legend”,name:“Iron Legend II”,icon:“⚜️”,xpNeeded:240000,color:”#10b981”,tierColor:”#10b981”},
-{level:27,tier:“Iron Legend”,name:“Iron Legend III”,icon:“⚜️”,xpNeeded:280000,color:”#059669”,tierColor:”#10b981”},
-{level:28,tier:“Immortal”,name:“Immortal I”,icon:“🔱”,xpNeeded:325000,color:”#c4b5fd”,tierColor:”#8b5cf6”},
-{level:29,tier:“Immortal”,name:“Immortal II”,icon:“🔱”,xpNeeded:380000,color:”#8b5cf6”,tierColor:”#8b5cf6”},
-{level:30,tier:“Immortal”,name:“Immortal III”,icon:“🔱”,xpNeeded:440000,color:”#7c3aed”,tierColor:”#8b5cf6”},
+  {level:1,tier:"Bronze",name:"Bronze I",icon:"🥉",xpNeeded:0,color:"#cd7f32",tierColor:"#cd7f32"},
+  {level:2,tier:"Bronze",name:"Bronze II",icon:"🥉",xpNeeded:200,color:"#c87533",tierColor:"#cd7f32"},
+  {level:3,tier:"Bronze",name:"Bronze III",icon:"🥉",xpNeeded:500,color:"#b87333",tierColor:"#cd7f32"},
+  {level:4,tier:"Silver",name:"Silver I",icon:"🥈",xpNeeded:1000,color:"#94a3b8",tierColor:"#c0c0c0"},
+  {level:5,tier:"Silver",name:"Silver II",icon:"🥈",xpNeeded:1800,color:"#c0c0c0",tierColor:"#c0c0c0"},
+  {level:6,tier:"Silver",name:"Silver III",icon:"🥈",xpNeeded:2800,color:"#e2e8f0",tierColor:"#c0c0c0"},
+  {level:7,tier:"Gold",name:"Gold I",icon:"🥇",xpNeeded:4000,color:"#fbbf24",tierColor:"#f59e0b"},
+  {level:8,tier:"Gold",name:"Gold II",icon:"🥇",xpNeeded:5500,color:"#f59e0b",tierColor:"#f59e0b"},
+  {level:9,tier:"Gold",name:"Gold III",icon:"🥇",xpNeeded:7500,color:"#d97706",tierColor:"#f59e0b"},
+  {level:10,tier:"Platinum",name:"Platinum I",icon:"💠",xpNeeded:10000,color:"#67e8f9",tierColor:"#22d3ee"},
+  {level:11,tier:"Platinum",name:"Platinum II",icon:"💠",xpNeeded:13000,color:"#22d3ee",tierColor:"#22d3ee"},
+  {level:12,tier:"Platinum",name:"Platinum III",icon:"💠",xpNeeded:17000,color:"#06b6d4",tierColor:"#22d3ee"},
+  {level:13,tier:"Diamond",name:"Diamond I",icon:"💎",xpNeeded:22000,color:"#a5b4fc",tierColor:"#6366f1"},
+  {level:14,tier:"Diamond",name:"Diamond II",icon:"💎",xpNeeded:28000,color:"#6366f1",tierColor:"#6366f1"},
+  {level:15,tier:"Diamond",name:"Diamond III",icon:"💎",xpNeeded:35000,color:"#4f46e5",tierColor:"#6366f1"},
+  {level:16,tier:"Master",name:"Master I",icon:"⚔️",xpNeeded:43000,color:"#f87171",tierColor:"#f43f5e"},
+  {level:17,tier:"Master",name:"Master II",icon:"⚔️",xpNeeded:52000,color:"#f43f5e",tierColor:"#f43f5e"},
+  {level:18,tier:"Master",name:"Master III",icon:"⚔️",xpNeeded:63000,color:"#e11d48",tierColor:"#f43f5e"},
+  {level:19,tier:"Grandmaster",name:"Grandmaster I",icon:"👑",xpNeeded:76000,color:"#f9a8d4",tierColor:"#ec4899"},
+  {level:20,tier:"Grandmaster",name:"Grandmaster II",icon:"👑",xpNeeded:91000,color:"#ec4899",tierColor:"#ec4899"},
+  {level:21,tier:"Grandmaster",name:"Grandmaster III",icon:"👑",xpNeeded:108000,color:"#db2777",tierColor:"#ec4899"},
+  {level:22,tier:"Champion",name:"Champion I",icon:"🏆",xpNeeded:128000,color:"#fb923c",tierColor:"#f97316"},
+  {level:23,tier:"Champion",name:"Champion II",icon:"🏆",xpNeeded:150000,color:"#f97316",tierColor:"#f97316"},
+  {level:24,tier:"Champion",name:"Champion III",icon:"🏆",xpNeeded:175000,color:"#ea580c",tierColor:"#f97316"},
+  {level:25,tier:"Iron Legend",name:"Iron Legend I",icon:"⚜️",xpNeeded:205000,color:"#34d399",tierColor:"#10b981"},
+  {level:26,tier:"Iron Legend",name:"Iron Legend II",icon:"⚜️",xpNeeded:240000,color:"#10b981",tierColor:"#10b981"},
+  {level:27,tier:"Iron Legend",name:"Iron Legend III",icon:"⚜️",xpNeeded:280000,color:"#059669",tierColor:"#10b981"},
+  {level:28,tier:"Immortal",name:"Immortal I",icon:"🔱",xpNeeded:325000,color:"#c4b5fd",tierColor:"#8b5cf6"},
+  {level:29,tier:"Immortal",name:"Immortal II",icon:"🔱",xpNeeded:380000,color:"#8b5cf6",tierColor:"#8b5cf6"},
+  {level:30,tier:"Immortal",name:"Immortal III",icon:"🔱",xpNeeded:440000,color:"#7c3aed",tierColor:"#8b5cf6"},
 ];
+
+// ─── ENHANCEMENT 3: Tag color hash ───
+const TAG_COLORS=["#38bdf8","#34d399","#fbbf24","#f472b6","#a78bfa","#fb923c","#60a5fa","#4ade80","#e879f9","#facc15"];
+const tagColor=(tag)=>{let h=0;for(let i=0;i<tag.length;i++)h=(h*31+tag.charCodeAt(i))&0xfffffff;return TAG_COLORS[h%TAG_COLORS.length];};
 
 // ─── XP Calculation ───
 function calcScore(s){
-let xp=0;
-const reminders=s.reminders||[];
-xp+=reminders.filter(r=>r.done).length*8;
-const defaultIds=[“personal”,“work”,“health”,“shopping”,“errands”];
-xp+=(s.lists||[]).filter(l=>!defaultIds.includes(l.id)).length*15;
-const doneByDay={};reminders.filter(r=>r.done&&r.doneAt).forEach(r=>{const d=r.doneAt.slice(0,10);doneByDay[d]=(doneByDay[d]||0)+1;});
-Object.values(doneByDay).forEach(n=>{if(n>=3)xp+=25;if(n>=5)xp+=25;});
-reminders.forEach(r=>{if(r.subtasks){xp+=r.subtasks.filter(st=>st.done).length*3;}});
-const rank=[…IRON_RANKS].reverse().find(r=>xp>=r.xpNeeded)||IRON_RANKS[0];
-const nextRank=IRON_RANKS.find(r=>r.level===rank.level+1);
-const xpIntoRank=xp-rank.xpNeeded;
-const xpForNext=nextRank?(nextRank.xpNeeded-rank.xpNeeded):null;
-const pct=xpForNext?Math.min(100,Math.round(xpIntoRank/xpForNext*100)):100;
-const sortedDays=Object.keys(doneByDay).sort().reverse();
-let streak=0;
-const td=todayStr();
-let checkDate=new Date(td+“T12:00:00”);
-for(let i=0;i<365;i++){
-const ds=checkDate.toISOString().split(“T”)[0];
-if(doneByDay[ds]){streak++;checkDate.setDate(checkDate.getDate()-1);}
-else if(ds===td){checkDate.setDate(checkDate.getDate()-1);}
-else break;
-}
-return{xp,rank,nextRank,xpIntoRank,xpForNext,pct,streak};
+  let xp=0;
+  const reminders=s.reminders||[];
+  xp+=reminders.filter(r=>r.done).length*8;
+  const defaultIds=["personal","work","health","shopping","errands"];
+  xp+=(s.lists||[]).filter(l=>!defaultIds.includes(l.id)).length*15;
+  const doneByDay={};reminders.filter(r=>r.done&&r.doneAt).forEach(r=>{const d=r.doneAt.slice(0,10);doneByDay[d]=(doneByDay[d]||0)+1;});
+  Object.values(doneByDay).forEach(n=>{if(n>=3)xp+=25;if(n>=5)xp+=25;});
+  reminders.forEach(r=>{if(r.subtasks){xp+=r.subtasks.filter(st=>st.done).length*3;}});
+  // Tags bonus: 2xp per unique tag ever used
+  const allTagSet=new Set();reminders.forEach(r=>{(r.tags||[]).forEach(t=>allTagSet.add(t));});
+  xp+=allTagSet.size*2;
+  const rank=[...IRON_RANKS].reverse().find(r=>xp>=r.xpNeeded)||IRON_RANKS[0];
+  const nextRank=IRON_RANKS.find(r=>r.level===rank.level+1);
+  const xpIntoRank=xp-rank.xpNeeded;
+  const xpForNext=nextRank?(nextRank.xpNeeded-rank.xpNeeded):null;
+  const pct=xpForNext?Math.min(100,Math.round(xpIntoRank/xpForNext*100)):100;
+  const sortedDays=Object.keys(doneByDay).sort().reverse();
+  let streak=0;
+  const td=todayStr();
+  let checkDate=new Date(td+"T12:00:00");
+  for(let i=0;i<365;i++){
+    const ds=checkDate.toISOString().split("T")[0];
+    if(doneByDay[ds]){streak++;checkDate.setDate(checkDate.getDate()-1);}
+    else if(ds===td){checkDate.setDate(checkDate.getDate()-1);}
+    else break;
+  }
+  return{xp,rank,nextRank,xpIntoRank,xpForNext,pct,streak};
 }
 
 // ─── Daily Missions ───
 function getDailyMissions(s){
-const td=todayStr();
-const doneToday=(s.reminders||[]).filter(r=>r.done&&r.doneAt&&r.doneAt.startsWith(td));
-const overdueCount=(s.reminders||[]).filter(r=>!r.done&&r.date&&r.date<td).length;
-const totalToday=(s.reminders||[]).filter(r=>!r.done&&r.date===td);
-const allTodayDone=totalToday.length===0&&doneToday.length>0;
-const defaultIds=[“personal”,“work”,“health”,“shopping”,“errands”];
-const hasCustomList=(s.lists||[]).some(l=>!defaultIds.includes(l.id));
-const highPriDone=(s.reminders||[]).some(r=>r.done&&r.priority===“high”&&r.doneAt&&r.doneAt.startsWith(td));
-return[
-{icon:“✅”,title:“Complete 3 Reminders”,desc:“Check off 3 reminders today”,xp:25,done:doneToday.length>=3},
-{icon:“🎯”,title:“Clear Today’s List”,desc:“Complete all of today’s reminders”,xp:40,done:allTodayDone},
-{icon:“⚡”,title:“Tackle High Priority”,desc:“Complete a high-priority reminder”,xp:20,done:highPriDone},
-{icon:“📋”,title:“Create a Custom List”,desc:“Add a list beyond the defaults”,xp:15,done:hasCustomList},
-{icon:“🔥”,title:“No Overdue Items”,desc:“Keep your overdue count at zero”,xp:20,done:overdueCount===0},
-{icon:“➕”,title:“Add a Reminder”,desc:“Create at least one new reminder today”,xp:10,done:(s.reminders||[]).some(r=>r.createdAt&&r.createdAt.startsWith(td))},
-];
+  const td=todayStr();
+  const doneToday=(s.reminders||[]).filter(r=>r.done&&r.doneAt&&r.doneAt.startsWith(td));
+  const overdueCount=(s.reminders||[]).filter(r=>!r.done&&r.date&&r.date<td).length;
+  const totalToday=(s.reminders||[]).filter(r=>!r.done&&r.date===td);
+  const allTodayDone=totalToday.length===0&&doneToday.length>0;
+  const defaultIds=["personal","work","health","shopping","errands"];
+  const hasCustomList=(s.lists||[]).some(l=>!defaultIds.includes(l.id));
+  const highPriDone=(s.reminders||[]).some(r=>r.done&&r.priority==="high"&&r.doneAt&&r.doneAt.startsWith(td));
+  const hasTag=(s.reminders||[]).some(r=>(r.tags||[]).length>0);
+  return[
+    {icon:"✅",title:"Complete 3 Reminders",desc:"Check off 3 reminders today",xp:25,done:doneToday.length>=3},
+    {icon:"🎯",title:"Clear Today's List",desc:"Complete all of today's reminders",xp:40,done:allTodayDone},
+    {icon:"⚡",title:"Tackle High Priority",desc:"Complete a high-priority reminder",xp:20,done:highPriDone},
+    {icon:"🏷️",title:"Tag a Reminder",desc:"Add at least one tag to any reminder",xp:10,done:hasTag},
+    {icon:"🔥",title:"No Overdue Items",desc:"Keep your overdue count at zero",xp:20,done:overdueCount===0},
+    {icon:"➕",title:"Add a Reminder",desc:"Create at least one new reminder today",xp:10,done:(s.reminders||[]).some(r=>r.createdAt&&r.createdAt.startsWith(td))},
+  ];
 }
 
 // ─── Notifications ───
 /* FIX iOS-2: Guard every Notification reference — the global is absent in WKWebView / some iOS contexts */
-const _hasNotif=typeof Notification!==“undefined”;
+const _hasNotif=typeof Notification!=="undefined";
 const Notif={
-supported:()=>_hasNotif&&“Notification” in window,
-granted:()=>_hasNotif&&Notification.permission===“granted”,
-request:async()=>{if(!Notif.supported())return false;try{const r=await Notification.requestPermission();return r===“granted”;}catch(e){return false;}},
-schedule:(r)=>{
-if(!Notif.granted()||!r.date||!r.time)return;
-const dt=new Date(r.date+“T”+r.time+”:00”);
-const now=Date.now();
-const diff=dt.getTime()-now;
-if(diff<=0)return;
-const key=“notif-”+r.id;
-const existing=parseInt(LS.get(key)||“0”);
-if(existing)clearTimeout(existing);
-if(diff<86400000*7){
-const tid=setTimeout(()=>{
-if(“serviceWorker” in navigator&&navigator.serviceWorker.controller){
-navigator.serviceWorker.ready.then(reg=>{
-reg.showNotification(“ReminderLog”,{body:r.title,icon:”./icon.svg”,badge:”./icon.svg”,tag:r.id,data:{id:r.id}});
-});
-} else if(_hasNotif){
-try{new Notification(“ReminderLog”,{body:r.title,icon:”./icon.svg”,tag:r.id});}catch(e){}
-}
-LS.set(key,0);
-},diff);
-LS.set(key,tid);
-}
-},
-cancel:(id)=>{const key=“notif-”+id;const tid=parseInt(LS.get(key)||“0”);if(tid)clearTimeout(tid);LS.set(key,0);},
-scheduleAll:(reminders)=>{reminders.filter(r=>!r.done&&r.date&&r.time).forEach(r=>Notif.schedule(r));},
+  supported:()=>_hasNotif&&"Notification" in window,
+  granted:()=>_hasNotif&&Notification.permission==="granted",
+  request:async()=>{if(!Notif.supported())return false;try{const r=await Notification.requestPermission();return r==="granted";}catch(e){return false;}},
+  schedule:(r)=>{
+    if(!Notif.granted()||!r.date||!r.time)return;
+    const dt=new Date(r.date+"T"+r.time+":00");
+    const now=Date.now();
+    const diff=dt.getTime()-now;
+    if(diff<=0)return;
+    const key="notif-"+r.id;
+    const existing=parseInt(LS.get(key)||"0");
+    if(existing)clearTimeout(existing);
+    if(diff<86400000*7){
+      const tid=setTimeout(()=>{
+        if("serviceWorker" in navigator&&navigator.serviceWorker.controller){
+          navigator.serviceWorker.ready.then(reg=>{
+            reg.showNotification("ReminderLog",{body:r.title,icon:"./icon.svg",badge:"./icon.svg",tag:r.id,data:{id:r.id}});
+          });
+        } else if(_hasNotif){
+          try{new Notification("ReminderLog",{body:r.title,icon:"./icon.svg",tag:r.id});}catch(e){}
+        }
+        LS.set(key,0);
+      },diff);
+      LS.set(key,tid);
+    }
+  },
+  cancel:(id)=>{const key="notif-"+id;const tid=parseInt(LS.get(key)||"0");if(tid)clearTimeout(tid);LS.set(key,0);},
+  scheduleAll:(reminders)=>{reminders.filter(r=>!r.done&&r.date&&r.time).forEach(r=>Notif.schedule(r));},
 };
 
 // ─── Level-Up Detection Hook ───
 function useLevelUp(score,lsKey){
-const {rank}=score;
-const [celebrating,setCelebrating]=useState(false);
-const [celebRank,setCelebRank]=useState(null);
-useEffect(()=>{
-const saved=parseInt(LS.get(lsKey)||“1”);
-if(rank.level>saved){
-LS.set(lsKey,rank.level);
-setCelebRank(rank);
-setTimeout(()=>setCelebrating(true),400);
-} else if(!LS.get(lsKey)){LS.set(lsKey,rank.level);}
-},[rank.level]);
-return{celebrating,celebRank,dismiss:()=>setCelebrating(false)};
+  const {rank}=score;
+  const [celebrating,setCelebrating]=useState(false);
+  const [celebRank,setCelebRank]=useState(null);
+  useEffect(()=>{
+    const saved=parseInt(LS.get(lsKey)||"1");
+    if(rank.level>saved){
+      LS.set(lsKey,rank.level);
+      setCelebRank(rank);
+      setTimeout(()=>setCelebrating(true),400);
+    } else if(!LS.get(lsKey)){LS.set(lsKey,rank.level);}
+  },[rank.level]);
+  return{celebrating,celebRank,dismiss:()=>setCelebrating(false)};
 }
 
 // ─── IronScoreCard ───
 function IronScoreCard({score,compact}){
-const {xp,rank,nextRank,xpIntoRank,xpForNext,pct,streak}=score;
-if(compact){
-return(
-<div style={{display:“flex”,alignItems:“center”,gap:8}}>
-<span style={{fontSize:20}}>{rank.icon}</span>
-<div>
-<div style={{fontSize:12,fontWeight:800,color:rank.color,lineHeight:1}}>{rank.name}</div>
-<div style={{fontSize:9,color:V.text3}}>{xp.toLocaleString()} XP{streak>0?” · “+streak+“🔥”:””}</div>
-</div>
-<div style={{flex:1,height:4,borderRadius:2,background:“rgba(255,255,255,0.06)”,marginLeft:4}}>
-<div style={{height:“100%”,borderRadius:2,width:pct+”%”,background:rank.color,transition:“width .5s”}}/>
-</div>
-</div>
-);
-}
-return(
-<div style={{padding:16,borderRadius:16,background:rank.color+“08”,border:“1px solid “+rank.color+“20”}}>
-<div style={{display:“flex”,alignItems:“center”,gap:12,marginBottom:12}}>
-<span style={{fontSize:36}}>{rank.icon}</span>
-<div>
-<div style={{fontSize:18,fontWeight:900,color:rank.color}}>{rank.name}</div>
-<div style={{fontSize:12,color:V.text3}}>{rank.tier} · Level {rank.level}</div>
-</div>
-<div style={{marginLeft:“auto”,textAlign:“right”}}>
-<div style={{fontSize:16,fontWeight:800,color:V.text,fontFamily:V.mono}}>{xp.toLocaleString()}</div>
-<div style={{fontSize:10,color:V.text3}}>Total XP</div>
-</div>
-</div>
-<div style={{height:6,borderRadius:3,background:“rgba(255,255,255,0.06)”,marginBottom:6}}>
-<div style={{height:“100%”,borderRadius:3,width:pct+”%”,background:“linear-gradient(90deg,”+rank.color+”,”+rank.tierColor+”)”,transition:“width .5s”}}/>
-</div>
-<div style={{display:“flex”,justifyContent:“space-between”,fontSize:10,color:V.text3}}>
-<span>{xpIntoRank.toLocaleString()} / {(xpForNext||0).toLocaleString()} XP</span>
-{nextRank&&<span>Next: {nextRank.name}</span>}
-</div>
-{streak>0&&<div style={{marginTop:8,fontSize:11,color:V.warn,fontWeight:700}}>🔥 {streak} day streak!</div>}
-</div>
-);
+  const {xp,rank,nextRank,xpIntoRank,xpForNext,pct,streak}=score;
+  if(compact){
+    return(
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:20}}>{rank.icon}</span>
+        <div>
+          <div style={{fontSize:12,fontWeight:800,color:rank.color,lineHeight:1}}>{rank.name}</div>
+          <div style={{fontSize:9,color:V.text3}}>{xp.toLocaleString()} XP{streak>0?" · "+streak+"🔥":""}</div>
+        </div>
+        <div style={{flex:1,height:4,borderRadius:2,background:"rgba(255,255,255,0.06)",marginLeft:4}}>
+          <div style={{height:"100%",borderRadius:2,width:pct+"%",background:rank.color,transition:"width .5s"}}/>
+        </div>
+      </div>
+    );
+  }
+  return(
+    <div style={{padding:16,borderRadius:16,background:rank.color+"08",border:"1px solid "+rank.color+"20"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+        <span style={{fontSize:36}}>{rank.icon}</span>
+        <div>
+          <div style={{fontSize:18,fontWeight:900,color:rank.color}}>{rank.name}</div>
+          <div style={{fontSize:12,color:V.text3}}>{rank.tier} · Level {rank.level}</div>
+        </div>
+        <div style={{marginLeft:"auto",textAlign:"right"}}>
+          <div style={{fontSize:16,fontWeight:800,color:V.text,fontFamily:V.mono}}>{xp.toLocaleString()}</div>
+          <div style={{fontSize:10,color:V.text3}}>Total XP</div>
+        </div>
+      </div>
+      <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,0.06)",marginBottom:6}}>
+        <div style={{height:"100%",borderRadius:3,width:pct+"%",background:"linear-gradient(90deg,"+rank.color+","+rank.tierColor+")",transition:"width .5s"}}/>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:V.text3}}>
+        <span>{xpIntoRank.toLocaleString()} / {(xpForNext||0).toLocaleString()} XP</span>
+        {nextRank&&<span>Next: {nextRank.name}</span>}
+      </div>
+      {streak>0&&<div style={{marginTop:8,fontSize:11,color:V.warn,fontWeight:700}}>🔥 {streak} day streak!</div>}
+    </div>
+  );
 }
 
 // ─── MissionsPanel ───
 function MissionsPanel({missions}){
-const [open,setOpen]=useState(false);
-const done=missions.filter(m=>m.done).length;
-return(
-<div>
-<button onClick={()=>setOpen(!open)} style={{width:“100%”,display:“flex”,alignItems:“center”,gap:8,padding:“10px 14px”,borderRadius:12,background:V.purple+“08”,border:“1px solid “+V.purple+“15”,cursor:“pointer”,fontFamily:V.font}}>
-<span style={{fontSize:14}}>🎯</span>
-<span style={{fontSize:12,fontWeight:700,color:V.purple,flex:1,textAlign:“left”}}>Daily Missions</span>
-<span style={{fontSize:11,fontWeight:800,color:V.purple,fontFamily:V.mono}}>{done}/{missions.length}</span>
-<svg width={14} height={14} viewBox=“0 0 24 24” fill=“none” stroke={V.purple} strokeWidth=“2” strokeLinecap=“round” style={{transform:open?“rotate(180deg)”:””,transition:“transform .2s”}}><polyline points="6 9 12 15 18 9"/></svg>
-</button>
-{open&&(
-<div style={{marginTop:6,display:“flex”,flexDirection:“column”,gap:4}}>
-{missions.map((m,i)=>(
-<div key={i} style={{display:“flex”,alignItems:“center”,gap:10,padding:“8px 12px”,borderRadius:10,background:m.done?V.green+“08”:“rgba(255,255,255,0.02)”,border:“1px solid “+(m.done?V.green+“20”:V.cardBorder),opacity:m.done?.7:1}}>
-<span style={{fontSize:16}}>{m.icon}</span>
-<div style={{flex:1}}>
-<div style={{fontSize:12,fontWeight:600,color:m.done?V.green:V.text}}>{m.title}</div>
-<div style={{fontSize:10,color:V.text3}}>{m.desc}</div>
-</div>
-<span style={{fontSize:10,fontWeight:800,color:m.done?V.green:V.warn,fontFamily:V.mono}}>+{m.xp} XP</span>
-</div>
-))}
-</div>
-)}
-</div>
-);
+  const [open,setOpen]=useState(false);
+  const done=missions.filter(m=>m.done).length;
+  return(
+    <div>
+      <button onClick={()=>setOpen(!open)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:12,background:V.purple+"08",border:"1px solid "+V.purple+"15",cursor:"pointer",fontFamily:V.font}}>
+        <span style={{fontSize:14}}>🎯</span>
+        <span style={{fontSize:12,fontWeight:700,color:V.purple,flex:1,textAlign:"left"}}>Daily Missions</span>
+        <span style={{fontSize:11,fontWeight:800,color:V.purple,fontFamily:V.mono}}>{done}/{missions.length}</span>
+        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={V.purple} strokeWidth="2" strokeLinecap="round" style={{transform:open?"rotate(180deg)":"",transition:"transform .2s"}}><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      {open&&(
+        <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:4}}>
+          {missions.map((m,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:m.done?V.green+"08":"rgba(255,255,255,0.02)",border:"1px solid "+(m.done?V.green+"20":V.cardBorder),opacity:m.done?.7:1}}>
+              <span style={{fontSize:16}}>{m.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,fontWeight:600,color:m.done?V.green:V.text}}>{m.title}</div>
+                <div style={{fontSize:10,color:V.text3}}>{m.desc}</div>
+              </div>
+              <span style={{fontSize:10,fontWeight:800,color:m.done?V.green:V.warn,fontFamily:V.mono}}>+{m.xp} XP</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Level-Up Celebration ───
 function LevelUpCelebration({rank,onDismiss}){
-const [show,setShow]=useState(false);
-useEffect(()=>{setTimeout(()=>setShow(true),50);},[]);
-const dismiss=()=>{setShow(false);setTimeout(onDismiss,300);};
-const particles=Array.from({length:16},(_,i)=>({angle:i/16*360,color:[rank.color,”#fbbf24”,”#34d399”,”#60a5fa”,”#c084fc”][i%5]}));
-return ReactDOM.createPortal(
-<div onClick={dismiss} style={{position:“fixed”,inset:0,zIndex:9998,background:“rgba(0,0,0,0.85)”,display:“flex”,alignItems:“center”,justifyContent:“center”,opacity:show?1:0,transition:“opacity .3s”,backdropFilter:“blur(4px)”}}>
-<div style={{position:“absolute”,top:“50%”,left:“50%”,pointerEvents:“none”}}>
-{show&&particles.map((p,i)=>{const rad=p.angle*Math.PI/180;const dist=80+Math.random()*60;return(
-<div key={i} style={{position:“absolute”,width:8,height:8,borderRadius:4,background:p.color,
-transform:“translate(”+Math.cos(rad)*dist+“px, “+Math.sin(rad)*dist+“px)”,
-animation:“fadeUp .6s ease both”,animationDelay:i*0.03+“s”}}/>
-);})}
-</div>
-<div onClick={e=>e.stopPropagation()} style={{textAlign:“center”,padding:“32px 28px”,borderRadius:24,background:“linear-gradient(135deg,”+rank.color+“18,”+rank.tierColor+“08)”,border:“2px solid “+rank.color+“50”,maxWidth:300,margin:“0 20px”,position:“relative”,zIndex:1}}>
-<div style={{fontSize:56,marginBottom:8,lineHeight:1}}>{rank.icon}</div>
-<div style={{fontSize:11,fontWeight:700,color:rank.color,textTransform:“uppercase”,letterSpacing:2,marginBottom:4}}>Rank Up!</div>
-<div style={{fontSize:26,fontWeight:900,color:rank.color,marginBottom:4}}>{rank.name}</div>
-<div style={{fontSize:13,color:V.text3,marginBottom:4}}>{rank.tier} · Level {rank.level}</div>
-<div style={{fontSize:11,color:V.text3,marginBottom:20}}>Tap anywhere to dismiss</div>
-<div style={{padding:“10px 16px”,borderRadius:10,background:rank.color+“15”,border:“1px solid “+rank.color+“30”}}>
-<div style={{fontSize:10,color:V.text3,marginBottom:2}}>NEXT: {rank.level<30?“rank up at “+IRON_RANKS.find(r=>r.level===rank.level+1).xpNeeded.toLocaleString()+” XP”:“MAX RANK”}</div>
-</div>
-</div>
-</div>,
-document.body
-);
+  const [show,setShow]=useState(false);
+  useEffect(()=>{setTimeout(()=>setShow(true),50);},[]);
+  const dismiss=()=>{setShow(false);setTimeout(onDismiss,300);};
+  const particles=Array.from({length:16},(_,i)=>({angle:i/16*360,color:[rank.color,"#fbbf24","#34d399","#60a5fa","#c084fc"][i%5]}));
+  return ReactDOM.createPortal(
+    <div onClick={dismiss} style={{position:"fixed",inset:0,zIndex:9998,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",opacity:show?1:0,transition:"opacity .3s",backdropFilter:"blur(4px)"}}>
+      <div style={{position:"absolute",top:"50%",left:"50%",pointerEvents:"none"}}>
+        {show&&particles.map((p,i)=>{const rad=p.angle*Math.PI/180;const dist=80+Math.random()*60;return(
+          <div key={i} style={{position:"absolute",width:8,height:8,borderRadius:4,background:p.color,
+            transform:"translate("+Math.cos(rad)*dist+"px, "+Math.sin(rad)*dist+"px)",
+            animation:"fadeUp .6s ease both",animationDelay:i*0.03+"s"}}/>
+        );})}
+      </div>
+      <div onClick={e=>e.stopPropagation()} style={{textAlign:"center",padding:"32px 28px",borderRadius:24,background:"linear-gradient(135deg,"+rank.color+"18,"+rank.tierColor+"08)",border:"2px solid "+rank.color+"50",maxWidth:300,margin:"0 20px",position:"relative",zIndex:1}}>
+        <div style={{fontSize:56,marginBottom:8,lineHeight:1}}>{rank.icon}</div>
+        <div style={{fontSize:11,fontWeight:700,color:rank.color,textTransform:"uppercase",letterSpacing:2,marginBottom:4}}>Rank Up!</div>
+        <div style={{fontSize:26,fontWeight:900,color:rank.color,marginBottom:4}}>{rank.name}</div>
+        <div style={{fontSize:13,color:V.text3,marginBottom:4}}>{rank.tier} · Level {rank.level}</div>
+        <div style={{fontSize:11,color:V.text3,marginBottom:20}}>Tap anywhere to dismiss</div>
+        <div style={{padding:"10px 16px",borderRadius:10,background:rank.color+"15",border:"1px solid "+rank.color+"30"}}>
+          <div style={{fontSize:10,color:V.text3,marginBottom:2}}>NEXT: {rank.level<30?"rank up at "+IRON_RANKS.find(r=>r.level===rank.level+1).xpNeeded.toLocaleString()+" XP":"MAX RANK"}</div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
 }
 
 // ─── UndoToast ───
 const UndoMgr={_fn:null,_timer:null,show:(msg,onUndo,accent)=>{if(UndoMgr._timer)clearTimeout(UndoMgr._timer);if(UndoMgr._fn)UndoMgr._fn({msg,onUndo,accent:accent||V.accent,ts:Date.now()});UndoMgr._timer=setTimeout(()=>{if(UndoMgr._fn)UndoMgr._fn(null);},5000);},clear:()=>{if(UndoMgr._timer)clearTimeout(UndoMgr._timer);if(UndoMgr._fn)UndoMgr._fn(null);}};
 function UndoToastBar(){
-const [item,setItem]=useState(null);
-UndoMgr._fn=setItem;
-useEffect(()=>()=>{UndoMgr._fn=null;},[]);
-if(!item)return null;
-return ReactDOM.createPortal(
-<div style={{position:“fixed”,bottom:“calc(env(safe-area-inset-bottom,0px) + 88px)”,left:16,right:16,zIndex:9997,display:“flex”,alignItems:“center”,gap:10,padding:“12px 16px”,borderRadius:14,background:“rgba(20,20,32,0.97)”,border:“1px solid “+item.accent+“30”,backdropFilter:“blur(12px)”,boxShadow:“0 4px 24px rgba(0,0,0,0.4)”,animation:“fadeUp .25s ease”}}>
-<span style={{fontSize:13,color:V.text,flex:1}}>{item.msg}</span>
-<button onClick={()=>{item.onUndo();UndoMgr.clear();}} style={{padding:“6px 14px”,borderRadius:8,background:item.accent+“20”,border:“1px solid “+item.accent+“40”,color:item.accent,fontSize:12,fontWeight:700,fontFamily:V.font,cursor:“pointer”,flexShrink:0}}>Undo</button>
-</div>,
-document.body
-);
+  const [item,setItem]=useState(null);
+  UndoMgr._fn=setItem;
+  useEffect(()=>()=>{UndoMgr._fn=null;},[]);
+  if(!item)return null;
+  return ReactDOM.createPortal(
+    <div style={{position:"fixed",bottom:"calc(env(safe-area-inset-bottom,0px) + 88px)",left:16,right:16,zIndex:9997,display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderRadius:14,background:"rgba(20,20,32,0.97)",border:"1px solid "+item.accent+"30",backdropFilter:"blur(12px)",boxShadow:"0 4px 24px rgba(0,0,0,0.4)",animation:"fadeUp .25s ease"}}>
+      <span style={{fontSize:13,color:V.text,flex:1}}>{item.msg}</span>
+      <button onClick={()=>{item.onUndo();UndoMgr.clear();}} style={{padding:"6px 14px",borderRadius:8,background:item.accent+"20",border:"1px solid "+item.accent+"40",color:item.accent,fontSize:12,fontWeight:700,fontFamily:V.font,cursor:"pointer",flexShrink:0}}>Undo</button>
+    </div>,
+    document.body
+  );
 }
 
 // ─── Constants ───
 const DEFAULT_LISTS=[
-{id:“personal”,label:“Personal”,icon:“🙂”,color:”#38bdf8”},
-{id:“work”,label:“Work”,icon:“💼”,color:”#60a5fa”},
-{id:“health”,label:“Health”,icon:“💊”,color:”#34d399”},
-{id:“shopping”,label:“Shopping”,icon:“🛒”,color:”#fbbf24”},
-{id:“errands”,label:“Errands”,icon:“📍”,color:”#f472b6”},
+  {id:"personal",label:"Personal",icon:"🙂",color:"#38bdf8"},
+  {id:"work",label:"Work",icon:"💼",color:"#60a5fa"},
+  {id:"health",label:"Health",icon:"💊",color:"#34d399"},
+  {id:"shopping",label:"Shopping",icon:"🛒",color:"#fbbf24"},
+  {id:"errands",label:"Errands",icon:"📍",color:"#f472b6"},
 ];
-const PRIORITIES=[{id:“high”,label:“High”,color:V.danger},{id:“medium”,label:“Medium”,color:V.warn},{id:“low”,label:“Low”,color:V.accent}];
-const RECURS=[{id:“none”,label:“None”},{id:“daily”,label:“Daily”},{id:“weekly”,label:“Weekly”},{id:“monthly”,label:“Monthly”}];
-const SORT_OPTIONS=[{id:“date”,label:“Date”},{id:“priority”,label:“Priority”},{id:“name”,label:“Name”},{id:“created”,label:“Created”}];
+const PRIORITIES=[{id:"high",label:"High",color:V.danger},{id:"medium",label:"Medium",color:V.warn},{id:"low",label:"Low",color:V.accent}];
+const RECURS=[{id:"none",label:"None"},{id:"daily",label:"Daily"},{id:"weekly",label:"Weekly"},{id:"monthly",label:"Monthly"}];
+const SORT_OPTIONS=[{id:"date",label:"Date"},{id:"priority",label:"Priority"},{id:"name",label:"Name"},{id:"created",label:"Created"}];
 
 // ─── Shared Components ───
 const Card=({children,style:s={},onClick})=>(
-
   <div onClick={onClick} style={{background:V.card,border:"1px solid "+V.cardBorder,borderRadius:16,padding:16,...(onClick?{cursor:"pointer"}:{}),...s}}>{children}</div>
 );
 const Btn=({children,v="primary",full,disabled,onClick,s:ex={}})=>{
@@ -473,1116 +524,1176 @@ function GlobalConfirm(){
   return ReactDOM.createPortal(<div style={{position:"fixed",inset:0,zIndex:9995,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",padding:16}}><div style={{width:"100%",background:V.bg,borderRadius:20,padding:24,border:"1px solid "+V.cardBorder}}><div style={{fontSize:17,fontWeight:700,color:V.text,marginBottom:6}}>{c.msg}</div>{c.sub&&<div style={{fontSize:13,color:V.text3,marginBottom:20}}>{c.sub}</div>}<div style={{display:"flex",gap:10}}><Btn v="secondary" full onClick={()=>setC(null)}>Cancel</Btn><Btn v="danger" full onClick={()=>{c.onOk();setC(null);}}>Confirm</Btn></div></div></div>,document.body);
 }
 
-// ─── Quick-add bar ───
+// ─── ENHANCEMENT 4: DueBadge ───
+function DueBadge({r}){
+  if(r.done||!r.date)return null;
+  const days=overdueByDays(r);
+  const diff=dueDiffDays(r);
+  let label,bg,color;
+  if(days>0){
+    label=days===1?"1d overdue":days+"d overdue";
+    bg=V.danger+"20";color=V.danger;
+  } else if(diff===0){
+    label="Today";bg=V.warn+"22";color=V.warn;
+  } else if(diff===1){
+    label="Tomorrow";bg=V.accent+"15";color=V.accent;
+  } else {
+    return null;
+  }
+  return(
+    <span className="badge-pop" style={{display:"inline-flex",alignItems:"center",gap:2,padding:"1px 7px",borderRadius:20,background:bg,border:"1px solid "+color+"30",fontSize:9,fontWeight:800,color,fontFamily:V.mono,letterSpacing:".03em",flexShrink:0}}>
+      {days>0?"⚠ ":""}{label}
+    </span>
+  );
+}
+
+// ─── ENHANCEMENT 5: Tags ───
+function TagPill({tag,onRemove}){
+  const c=tagColor(tag);
+  return(
+    <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 8px",borderRadius:20,background:c+"18",border:"1px solid "+c+"25",fontSize:10,fontWeight:700,color:c,flexShrink:0}}>
+      #{tag}
+      {onRemove&&<button onClick={(e)=>{e.stopPropagation();onRemove();}} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:c,lineHeight:1,fontSize:11,opacity:.7,marginLeft:1}}>×</button>}
+    </span>
+  );
+}
+function TagEditor({tags,onChange}){
+  const[input,setInput]=useState("");
+  const add=()=>{
+    const t=input.trim().toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-]/g,"");
+    if(!t||tags.includes(t))return;
+    onChange([...tags,t]);setInput("");
+  };
+  return(
+    <div style={{marginBottom:12}}>
+      <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Tags</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:tags.length>0?8:0}}>
+        {tags.map(t=><TagPill key={t} tag={t} onRemove={()=>onChange(tags.filter(x=>x!==t))}/>)}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="e.g. urgent, home, bill…"
+          style={{flex:1,padding:"8px 10px",background:"rgba(255,255,255,0.03)",border:"1px solid "+V.cardBorder,borderRadius:8,color:V.text,fontSize:13,fontFamily:V.font,outline:"none"}}/>
+        <button onClick={add} disabled={!input.trim()} style={{padding:"8px 12px",borderRadius:8,background:V.accent+"15",color:V.accent,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:V.font,opacity:input.trim()?1:.3}}>Add</button>
+      </div>
+    </div>
+  );
+}
+function TagFilterBar({allTags,activeTag,setActiveTag}){
+  if(!allTags.length)return null;
+  return(
+    <div style={{display:"flex",gap:5,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+      <button onClick={()=>setActiveTag(null)} style={{padding:"4px 10px",borderRadius:20,border:"none",fontSize:10,fontWeight:700,fontFamily:V.font,cursor:"pointer",background:!activeTag?V.accent+"15":"rgba(255,255,255,0.03)",color:!activeTag?V.accent:V.text3,whiteSpace:"nowrap"}}>All</button>
+      {allTags.map(t=>{const c=tagColor(t);const active=activeTag===t;return(
+        <button key={t} onClick={()=>setActiveTag(active?null:t)} style={{padding:"4px 10px",borderRadius:20,border:"1px solid "+(active?c+"50":"transparent"),fontSize:10,fontWeight:700,fontFamily:V.font,cursor:"pointer",background:active?c+"18":"rgba(255,255,255,0.03)",color:active?c:V.text3,whiteSpace:"nowrap"}}>#{t}</button>
+      );})}
+    </div>
+  );
+}
+
+// ─── ENHANCEMENT 6: Today Hero Widget Card ───
+function TodayHeroCard({score,doneCount,totalCount,overdueCount}){
+  const{rank,pct,streak}=score;
+  const h=new Date().getHours();
+  const greet=h<12?"Good morning":h<17?"Good afternoon":"Good evening";
+  const ringPct=totalCount>0?Math.round(doneCount/totalCount*100):0;
+  const radius=36;const circ=2*Math.PI*radius;const offset=circ-(ringPct/100)*circ;
+  const motiveLine=(()=>{
+    if(overdueCount>0)return overdueCount+" overdue — let's clear them 💪";
+    if(ringPct===100&&totalCount>0)return"All done today! Outstanding 🎉";
+    if(ringPct>=50)return"More than halfway there, keep going 🔥";
+    if(totalCount>0)return(totalCount-doneCount)+" left today · you've got this";
+    return"Nothing due · add one above to get started";
+  })();
+  return(
+    <div style={{borderRadius:20,background:"linear-gradient(135deg,"+rank.color+"12,"+rank.tierColor+"06)",border:"1px solid "+rank.color+"25",padding:"16px 18px",position:"relative",overflow:"hidden",marginBottom:2}}>
+      <div style={{position:"absolute",top:-20,right:-20,width:100,height:100,borderRadius:"50%",background:rank.color+"06",pointerEvents:"none"}}/>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <div style={{position:"relative",flexShrink:0}}>
+          <svg width={88} height={88} style={{transform:"rotate(-90deg)"}}>
+            <circle cx={44} cy={44} r={radius} fill="none" stroke={"rgba(255,255,255,0.07)"} strokeWidth={6}/>
+            <circle cx={44} cy={44} r={radius} fill="none"
+              stroke={ringPct===100?V.green:rank.color} strokeWidth={6}
+              strokeLinecap="round"
+              strokeDasharray={circ}
+              strokeDashoffset={offset}
+              style={{transition:"stroke-dashoffset .7s ease"}}
+            />
+          </svg>
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:17,fontWeight:900,color:ringPct===100?V.green:rank.color,fontFamily:V.mono,lineHeight:1}}>{ringPct}%</span>
+            <span style={{fontSize:8,color:V.text3,fontWeight:600,marginTop:1}}>done</span>
+          </div>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:15,fontWeight:800,color:V.text,lineHeight:1,marginBottom:2}}>{greet} 👋</div>
+          <div style={{fontSize:10,color:V.text3,marginBottom:7}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div>
+          <div style={{fontSize:11,color:V.text2,lineHeight:1.4}}>{motiveLine}</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flexShrink:0}}>
+          <span style={{fontSize:24}}>{rank.icon}</span>
+          <div style={{fontSize:9,fontWeight:800,color:rank.color,textAlign:"center",lineHeight:1.2,maxWidth:50}}>{rank.name}</div>
+          {streak>0&&<div style={{fontSize:10,fontWeight:700,color:V.warn,marginTop:2}}>🔥{streak}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── QuickAdd ───
 function QuickAdd({lists,onAdd}){
-const [text,setText]=useState(””);
-const [list,setList]=useState(“personal”);
-const inp=useRef(null);
-const submit=()=>{
-if(!text.trim())return;
-onAdd({id:uid(),title:text.trim(),list,priority:“medium”,date:todayStr(),time:””,notes:””,recur:“none”,subtasks:[],done:false,createdAt:new Date().toISOString()});
-setText(””);Haptic.success();Toast.show(“Reminder added”,””);
-if(inp.current)inp.current.focus();
-};
-return(
-<div style={{background:V.accent+“06”,border:“1px solid “+V.accent+“15”,borderRadius:14,padding:12,marginBottom:4}}>
-<div style={{display:“flex”,gap:8,marginBottom:8}}>
-<input ref={inp} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key===“Enter”&&submit()} placeholder=“Add a reminder…” autoComplete=“off”
-style={{flex:1,padding:“10px 14px”,background:“rgba(255,255,255,0.05)”,border:“1px solid “+V.cardBorder,borderRadius:10,color:V.text,fontSize:15,fontFamily:V.font,outline:“none”,minHeight:44}}/>
-<button onClick={submit} disabled={!text.trim()} style={{padding:“10px 16px”,borderRadius:10,background:text.trim()?“linear-gradient(135deg,”+V.accent+”,”+V.accent2+”)”:“rgba(255,255,255,0.04)”,border:“none”,cursor:text.trim()?“pointer”:“default”,fontSize:20,lineHeight:1,opacity:text.trim()?1:.3}}>+</button>
-</div>
-<div style={{display:“flex”,gap:5,overflowX:“auto”,WebkitOverflowScrolling:“touch”}}>
-{lists.map(l=>(
-<button key={l.id} onClick={()=>setList(l.id)} style={{padding:“5px 10px”,borderRadius:16,border:“1px solid “+(list===l.id?l.color:V.cardBorder),background:list===l.id?l.color+“15”:“transparent”,color:list===l.id?l.color:V.text3,fontSize:11,fontWeight:600,cursor:“pointer”,whiteSpace:“nowrap”,fontFamily:V.font}}>
-{l.icon} {l.label}
-</button>
-))}
-</div>
-</div>
-);
+  const [text,setText]=useState("");
+  const [list,setList]=useState("personal");
+  const inp=useRef(null);
+  const submit=()=>{
+    if(!text.trim())return;
+    onAdd({id:uid(),title:text.trim(),list,priority:"medium",date:todayStr(),time:"",notes:"",recur:"none",subtasks:[],tags:[],done:false,createdAt:new Date().toISOString()});
+    setText("");Haptic.success();Toast.show("Reminder added","");
+    if(inp.current)inp.current.focus();
+  };
+  return(
+    <div style={{background:V.accent+"06",border:"1px solid "+V.accent+"15",borderRadius:14,padding:12,marginBottom:4}}>
+      <div style={{display:"flex",gap:8,marginBottom:8}}>
+        <input ref={inp} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Add a reminder..." autoComplete="off"
+          style={{flex:1,padding:"10px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid "+V.cardBorder,borderRadius:10,color:V.text,fontSize:15,fontFamily:V.font,outline:"none",minHeight:44}}/>
+        <button onClick={submit} disabled={!text.trim()} style={{padding:"10px 16px",borderRadius:10,background:text.trim()?"linear-gradient(135deg,"+V.accent+","+V.accent2+")":"rgba(255,255,255,0.04)",border:"none",cursor:text.trim()?"pointer":"default",fontSize:20,lineHeight:1,opacity:text.trim()?1:.3}}>+</button>
+      </div>
+      <div style={{display:"flex",gap:5,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        {lists.map(l=>(
+          <button key={l.id} onClick={()=>setList(l.id)} style={{padding:"5px 10px",borderRadius:16,border:"1px solid "+(list===l.id?l.color:V.cardBorder),background:list===l.id?l.color+"15":"transparent",color:list===l.id?l.color:V.text3,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",fontFamily:V.font}}>
+            {l.icon} {l.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ─── Snooze Menu ───
 function SnoozeMenu({onSnooze,onClose}){
-const opts=[
-{label:“Later today”,date:todayStr(),time:“18:00”},
-{label:“Tomorrow”,date:daysFromNow(1),time:“09:00”},
-{label:“Next week”,date:daysFromNow(7),time:“09:00”},
-{label:“In 3 days”,date:daysFromNow(3),time:“09:00”},
-];
-return ReactDOM.createPortal(
-<div onClick={onClose} style={{position:“fixed”,inset:0,zIndex:9994,background:“rgba(0,0,0,0.6)”,display:“flex”,alignItems:“flex-end”,padding:16}}>
-<div onClick={e=>e.stopPropagation()} style={{width:“100%”,background:V.bg,borderRadius:20,padding:20,border:“1px solid “+V.cardBorder}}>
-<div style={{fontSize:15,fontWeight:700,color:V.text,marginBottom:14}}>Snooze until…</div>
-{opts.map((o,i)=>(
-<button key={i} onClick={()=>{onSnooze(o.date,o.time);onClose();}} style={{display:“flex”,alignItems:“center”,gap:10,width:“100%”,padding:“12px 14px”,borderRadius:12,border:“none”,background:“rgba(255,255,255,0.03)”,marginBottom:6,cursor:“pointer”,fontFamily:V.font,color:V.text,fontSize:13,fontWeight:500,textAlign:“left”}}>
-<span style={{fontSize:16}}>⏰</span>
-<span style={{flex:1}}>{o.label}</span>
-<span style={{fontSize:11,color:V.text3}}>{fmtDate(o.date)}</span>
-</button>
-))}
-<Btn v="secondary" full onClick={onClose} s={{marginTop:6}}>Cancel</Btn>
-</div>
-</div>,
-document.body
-);
+  const opts=[
+    {label:"Later today",date:todayStr(),time:"18:00"},
+    {label:"Tomorrow",date:daysFromNow(1),time:"09:00"},
+    {label:"Next week",date:daysFromNow(7),time:"09:00"},
+    {label:"In 3 days",date:daysFromNow(3),time:"09:00"},
+  ];
+  return ReactDOM.createPortal(
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:9994,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",background:V.bg,borderRadius:20,padding:20,border:"1px solid "+V.cardBorder}}>
+        <div style={{fontSize:15,fontWeight:700,color:V.text,marginBottom:14}}>Snooze until...</div>
+        {opts.map((o,i)=>(
+          <button key={i} onClick={()=>{onSnooze(o.date,o.time);onClose();}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"12px 14px",borderRadius:12,border:"none",background:"rgba(255,255,255,0.03)",marginBottom:6,cursor:"pointer",fontFamily:V.font,color:V.text,fontSize:13,fontWeight:500,textAlign:"left"}}>
+            <span style={{fontSize:16}}>⏰</span>
+            <span style={{flex:1}}>{o.label}</span>
+            <span style={{fontSize:11,color:V.text3}}>{fmtDate(o.date)}</span>
+          </button>
+        ))}
+        <Btn v="secondary" full onClick={onClose} s={{marginTop:6}}>Cancel</Btn>
+      </div>
+    </div>,
+    document.body
+  );
 }
 
 // ─── Reminder Row with Swipe ───
 function ReminderRow({r,lists,onToggle,onDelete,onEdit,onSnooze,bulkMode,selected,onSelect}){
-const overdue=isOverdue(r);
-const listObj=lists.find(l=>l.id===r.list)||lists[0];
-const priObj=PRIORITIES.find(p=>p.id===r.priority)||PRIORITIES[1];
-const [swiped,setSwiped]=useState(0);
-const touchRef=useRef({x:0,y:0,swiping:false});
-const subtasksDone=r.subtasks?r.subtasks.filter(st=>st.done).length:0;
-const subtasksTotal=r.subtasks?r.subtasks.length:0;
+  const overdue=isOverdue(r);
+  const listObj=lists.find(l=>l.id===r.list)||lists[0];
+  const priObj=PRIORITIES.find(p=>p.id===r.priority)||PRIORITIES[1];
+  const [swiped,setSwiped]=useState(0);
+  const touchRef=useRef({x:0,y:0,swiping:false});
+  const subtasksDone=r.subtasks?r.subtasks.filter(st=>st.done).length:0;
+  const subtasksTotal=r.subtasks?r.subtasks.length:0;
+  const tags=r.tags||[];
 
-const onTouchStart=(e)=>{
-if(bulkMode)return;
-touchRef.current={x:e.touches[0].clientX,y:e.touches[0].clientY,swiping:false};
-};
-const onTouchMove=(e)=>{
-if(bulkMode)return;
-const dx=e.touches[0].clientX-touchRef.current.x;
-const dy=e.touches[0].clientY-touchRef.current.y;
-if(!touchRef.current.swiping&&Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>10){
-touchRef.current.swiping=true;
-}
-if(touchRef.current.swiping){
-e.preventDefault();
-setSwiped(Math.max(-100,Math.min(100,dx)));
-}
-};
-const onTouchEnd=()=>{
-if(bulkMode)return;
-if(swiped>60){onToggle(r.id);Haptic.success();Toast.show(“Done!”,V.green);}
-else if(swiped<-60){
-/* FIX 5: Swipe-to-delete goes straight to delete + undo (no double confirm) */
-const backup={…r};
-onDelete(r.id);
-UndoMgr.show(“Reminder deleted”,()=>{/* restore triggered by parent onDelete undo */},V.danger);
-}
-setSwiped(0);
-touchRef.current.swiping=false;
-};
+  const onTouchStart=(e)=>{
+    if(bulkMode)return;
+    touchRef.current={x:e.touches[0].clientX,y:e.touches[0].clientY,swiping:false};
+  };
+  const onTouchMove=(e)=>{
+    if(bulkMode)return;
+    const dx=e.touches[0].clientX-touchRef.current.x;
+    const dy=e.touches[0].clientY-touchRef.current.y;
+    if(!touchRef.current.swiping&&Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>10){
+      touchRef.current.swiping=true;
+    }
+    if(touchRef.current.swiping){
+      e.preventDefault();
+      setSwiped(Math.max(-100,Math.min(100,dx)));
+    }
+  };
+  const onTouchEnd=()=>{
+    if(bulkMode)return;
+    if(swiped>60){
+      Haptic.priority(r.priority);
+      onToggle(r.id);Toast.show("Done! +8 XP",V.green);}
+    else if(swiped<-60){
+      /* FIX 5: Swipe-to-delete goes straight to delete + undo (no double confirm) */
+      const backup={...r};
+      onDelete(r.id);
+      UndoMgr.show("Reminder deleted",()=>{/* restore triggered by parent onDelete undo */},V.danger);
+    }
+    setSwiped(0);
+    touchRef.current.swiping=false;
+  };
 
-const handleClick=()=>{
-if(bulkMode){if(onSelect)onSelect(r.id);return;}
-onEdit(r);
-};
+  const handleClick=()=>{
+    if(bulkMode){if(onSelect)onSelect(r.id);return;}
+    onEdit(r);
+  };
 
-const bgColor=swiped>30?V.green+“30”:swiped<-30?V.danger+“30”:“transparent”;
+  const bgColor=swiped>30?V.green+"30":swiped<-30?V.danger+"30":"transparent";
 
-return(
-<div className=“fade-up” style={{position:“relative”,overflow:“hidden”,borderRadius:8,background:bgColor,transition:swiped===0?“background .2s”:“none”}}
-onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
-{swiped>20&&<div style={{position:“absolute”,left:12,top:“50%”,transform:“translateY(-50%)”,fontSize:11,color:V.green,fontWeight:700}}>Complete</div>}
-{swiped<-20&&<div style={{position:“absolute”,right:12,top:“50%”,transform:“translateY(-50%)”,fontSize:11,color:V.danger,fontWeight:700}}>Delete</div>}
-<div style={{display:“flex”,alignItems:“flex-start”,gap:10,padding:“11px 4px”,borderBottom:“1px solid rgba(56,189,248,0.04)”,opacity:r.done?.5:1,transition:“opacity .3s,transform .15s”,transform:“translateX(”+swiped+“px)”}}>
-{bulkMode?(
-<button onClick={()=>{if(onSelect)onSelect(r.id);}} style={{width:24,height:24,borderRadius:7,border:“2px solid “+(selected?V.accent:V.text3),background:selected?V.accent:“transparent”,cursor:“pointer”,flexShrink:0,marginTop:1,display:“flex”,alignItems:“center”,justifyContent:“center”}}>
-{selected&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#03090f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
-</button>
-):(
-<button onClick={()=>{Haptic.light();onToggle(r.id);if(!r.done)Toast.show(“Done!”,V.green);}} style={{width:24,height:24,borderRadius:7,border:“2px solid “+(r.done?V.accent:priObj.color),background:r.done?V.accent:“transparent”,cursor:“pointer”,flexShrink:0,marginTop:1,display:“flex”,alignItems:“center”,justifyContent:“center”,transition:“all .2s”}}>
-{r.done&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#03090f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
-</button>
-)}
-<div style={{flex:1,minWidth:0}} onClick={handleClick}>
-<div style={{display:“flex”,alignItems:“center”,gap:6,marginBottom:2}}>
-<span style={{fontSize:14,fontWeight:600,color:r.done?V.text3:V.text,textDecoration:r.done?“line-through”:“none”,whiteSpace:“nowrap”,overflow:“hidden”,textOverflow:“ellipsis”,maxWidth:“calc(100% - 50px)”}}>{r.title}</span>
-{r.recur!==“none”&&<span style={{fontSize:9,padding:“1px 5px”,borderRadius:6,background:V.blue2+“15”,color:V.blue2,fontWeight:700,flexShrink:0}}>🔁</span>}
-</div>
-<div style={{display:“flex”,alignItems:“center”,gap:6,flexWrap:“wrap”}}>
-{r.date&&<span style={{fontSize:10,color:overdue?V.danger:r.date===todayStr()?V.warn:V.text3,fontWeight:overdue||r.date===todayStr()?700:400}}>{overdue?“⚠️ “:””}{fmtDate(r.date)}{r.time?” · “+r.time:””}</span>}
-<span style={{fontSize:10,color:listObj.color,fontWeight:600}}>{listObj.icon} {listObj.label}</span>
-{subtasksTotal>0&&<span style={{fontSize:10,color:subtasksDone===subtasksTotal?V.green:V.text3,fontWeight:600}}>{subtasksDone}/{subtasksTotal} subtasks</span>}
-</div>
-{r.notes&&<div style={{fontSize:11,color:V.text3,marginTop:2,whiteSpace:“nowrap”,overflow:“hidden”,textOverflow:“ellipsis”}}>{r.notes}</div>}
-</div>
-<div style={{display:“flex”,flexDirection:“column”,alignItems:“flex-end”,gap:6,flexShrink:0}}>
-{!bulkMode&&!r.done&&onSnooze&&(
-<button onClick={(e)=>{e.stopPropagation();onSnooze(r);}} style={{background:“none”,border:“none”,padding:4,cursor:“pointer”,opacity:.5,fontSize:12}}>⏰</button>
-)}
-{!bulkMode&&(
-/* FIX 6: Removed duplicate UndoMgr.show — parent onDelete handler already calls it with a real restore callback */
-<button onClick={(e)=>{e.stopPropagation();Confirm.show(“Delete reminder?”,””,()=>{onDelete(r.id);});}} style={{background:“none”,border:“none”,padding:4,cursor:“pointer”,opacity:.4}}>
-<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
-</button>
-)}
-<div style={{width:7,height:7,borderRadius:“50%”,background:priObj.color,opacity:.8}}/>
-</div>
-</div>
-</div>
-);
+  return(
+    <div className="fade-up" style={{position:"relative",overflow:"hidden",borderRadius:8,background:bgColor,transition:swiped===0?"background .2s":"none"}}
+      onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+      {swiped>20&&<div style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:11,color:V.green,fontWeight:700}}>Complete</div>}
+      {swiped<-20&&<div style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",fontSize:11,color:V.danger,fontWeight:700}}>Delete</div>}
+      <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 4px",borderBottom:"1px solid rgba(56,189,248,0.04)",opacity:r.done?.5:1,transition:"opacity .3s,transform .15s",transform:"translateX("+swiped+"px)"}}>
+        {bulkMode?(
+          <button onClick={()=>{if(onSelect)onSelect(r.id);}} style={{width:24,height:24,borderRadius:7,border:"2px solid "+(selected?V.accent:V.text3),background:selected?V.accent:"transparent",cursor:"pointer",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {selected&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#03090f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+          </button>
+        ):(
+          <button onClick={()=>{Haptic.priority(r.priority);onToggle(r.id);if(!r.done)Toast.show("Done! +8 XP",V.green);}} style={{width:24,height:24,borderRadius:7,border:"2px solid "+(r.done?V.accent:priObj.color),background:r.done?V.accent:"transparent",cursor:"pointer",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
+            {r.done&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#03090f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+          </button>
+        )}
+        <div style={{flex:1,minWidth:0}} onClick={handleClick}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+            <span style={{fontSize:14,fontWeight:600,color:r.done?V.text3:V.text,textDecoration:r.done?"line-through":"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"calc(100% - 50px)"}}>{r.title}</span>
+            {r.recur!=="none"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:6,background:V.blue2+"15",color:V.blue2,fontWeight:700,flexShrink:0}}>🔁</span>}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            {r.date&&(()=>{
+              const diff=dueDiffDays(r);
+              const showBadge=!r.done&&(isOverdue(r)||diff===0||diff===1);
+              if(showBadge)return <DueBadge key="badge" r={r}/>;
+              return <span key="date" style={{fontSize:10,color:V.text3}}>{fmtDate(r.date)}{r.time?" · "+r.time:""}</span>;
+            })()}
+            <span style={{fontSize:10,color:listObj.color,fontWeight:600}}>{listObj.icon} {listObj.label}</span>
+            {subtasksTotal>0&&<span style={{fontSize:10,color:subtasksDone===subtasksTotal?V.green:V.text3,fontWeight:600}}>{subtasksDone}/{subtasksTotal}</span>}
+          </div>
+          {tags.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:3}}>{tags.map(t=><TagPill key={t} tag={t}/>)}</div>}
+          {r.notes&&<div style={{fontSize:11,color:V.text3,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.notes}</div>}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+          {!bulkMode&&!r.done&&onSnooze&&(
+            <button onClick={(e)=>{e.stopPropagation();onSnooze(r);}} style={{background:"none",border:"none",padding:4,cursor:"pointer",opacity:.5,fontSize:12}}>⏰</button>
+          )}
+          {!bulkMode&&(
+            /* FIX 6: Removed duplicate UndoMgr.show — parent onDelete handler already calls it with a real restore callback */
+            <button onClick={(e)=>{e.stopPropagation();Confirm.show("Delete reminder?","",()=>{onDelete(r.id);});}} style={{background:"none",border:"none",padding:4,cursor:"pointer",opacity:.4}}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+            </button>
+          )}
+          <div style={{width:7,height:7,borderRadius:"50%",background:priObj.color,opacity:.8}}/>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Subtasks Editor ───
 function SubtasksEditor({subtasks,onChange}){
-const [newText,setNewText]=useState(””);
-const add=()=>{
-if(!newText.trim())return;
-onChange([…subtasks,{id:uid(),text:newText.trim(),done:false}]);
-setNewText(””);
-};
-const toggle=(id)=>onChange(subtasks.map(st=>st.id===id?{…st,done:!st.done}:st));
-const remove=(id)=>onChange(subtasks.filter(st=>st.id!==id));
-return(
-<div style={{marginBottom:12}}>
-<div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:“uppercase”,letterSpacing:”.06em”,marginBottom:8}}>Subtasks ({subtasks.filter(s=>s.done).length}/{subtasks.length})</div>
-{subtasks.map(st=>(
-<div key={st.id} style={{display:“flex”,alignItems:“center”,gap:8,padding:“6px 0”,borderBottom:“1px solid rgba(255,255,255,0.03)”}}>
-<button onClick={()=>toggle(st.id)} style={{width:18,height:18,borderRadius:5,border:“2px solid “+(st.done?V.green:V.text3),background:st.done?V.green:“transparent”,cursor:“pointer”,flexShrink:0,display:“flex”,alignItems:“center”,justifyContent:“center”}}>
-{st.done&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#03090f" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}
-</button>
-<span style={{flex:1,fontSize:13,color:st.done?V.text3:V.text,textDecoration:st.done?“line-through”:“none”}}>{st.text}</span>
-<button onClick={()=>remove(st.id)} style={{background:“none”,border:“none”,cursor:“pointer”,padding:2,opacity:.4}}>
-<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-</button>
-</div>
-))}
-<div style={{display:“flex”,gap:6,marginTop:6}}>
-<input value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key===“Enter”&&add()} placeholder=“Add subtask…”
-style={{flex:1,padding:“8px 10px”,background:“rgba(255,255,255,0.03)”,border:“1px solid “+V.cardBorder,borderRadius:8,color:V.text,fontSize:13,fontFamily:V.font,outline:“none”}}/>
-<button onClick={add} disabled={!newText.trim()} style={{padding:“8px 12px”,borderRadius:8,background:V.accent+“15”,color:V.accent,border:“none”,cursor:“pointer”,fontSize:12,fontWeight:700,fontFamily:V.font,opacity:newText.trim()?1:.3}}>Add</button>
-</div>
-</div>
-);
+  const [newText,setNewText]=useState("");
+  const add=()=>{
+    if(!newText.trim())return;
+    onChange([...subtasks,{id:uid(),text:newText.trim(),done:false}]);
+    setNewText("");
+  };
+  const toggle=(id)=>onChange(subtasks.map(st=>st.id===id?{...st,done:!st.done}:st));
+  const remove=(id)=>onChange(subtasks.filter(st=>st.id!==id));
+  return(
+    <div style={{marginBottom:12}}>
+      <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Subtasks ({subtasks.filter(s=>s.done).length}/{subtasks.length})</div>
+      {subtasks.map(st=>(
+        <div key={st.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+          <button onClick={()=>toggle(st.id)} style={{width:18,height:18,borderRadius:5,border:"2px solid "+(st.done?V.green:V.text3),background:st.done?V.green:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {st.done&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#03090f" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}
+          </button>
+          <span style={{flex:1,fontSize:13,color:st.done?V.text3:V.text,textDecoration:st.done?"line-through":"none"}}>{st.text}</span>
+          <button onClick={()=>remove(st.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2,opacity:.4}}>
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      ))}
+      <div style={{display:"flex",gap:6,marginTop:6}}>
+        <input value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="Add subtask..."
+          style={{flex:1,padding:"8px 10px",background:"rgba(255,255,255,0.03)",border:"1px solid "+V.cardBorder,borderRadius:8,color:V.text,fontSize:13,fontFamily:V.font,outline:"none"}}/>
+        <button onClick={add} disabled={!newText.trim()} style={{padding:"8px 12px",borderRadius:8,background:V.accent+"15",color:V.accent,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:V.font,opacity:newText.trim()?1:.3}}>Add</button>
+      </div>
+    </div>
+  );
 }
 
 // ─── Edit Sheet ───
 function EditSheet({r,lists,onSave,onClose}){
-const [form,setForm]=useState({
-title:r?r.title:””,list:r?r.list:“personal”,priority:r?r.priority:“medium”,
-date:r?r.date:todayStr(),time:r?r.time:””,notes:r?r.notes:””,
-recur:r?r.recur:“none”,subtasks:r?r.subtasks:[]
-});
-const save=()=>{
-if(!form.title.trim())return;
-const saved={…r,…form,id:r?r.id:uid(),done:r?r.done:false,createdAt:r?r.createdAt:new Date().toISOString()};
-onSave(saved);
-Notif.schedule(saved);
-onClose();
-};
-return(
-<Sheet title={r?“Edit Reminder”:“New Reminder”} onClose={onClose} footer={<Btn full onClick={save} disabled={!form.title.trim()}>{r?“Save Changes”:“Add Reminder”}</Btn>}>
-<Field label=“Title” value={form.title} onChange={v=>setForm(f=>({…f,title:v}))} placeholder=“What do you need to do?” autoFocus/>
-<div style={{marginBottom:12}}>
-<div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:“uppercase”,letterSpacing:”.06em”,marginBottom:8}}>List</div>
-<div style={{display:“flex”,gap:6,flexWrap:“wrap”}}>
-{lists.map(l=>(
-<button key={l.id} onClick={()=>setForm(f=>({…f,list:l.id}))} style={{padding:“7px 12px”,borderRadius:16,border:“1px solid “+(form.list===l.id?l.color:V.cardBorder),background:form.list===l.id?l.color+“15”:“transparent”,color:form.list===l.id?l.color:V.text3,fontSize:12,fontWeight:600,cursor:“pointer”,fontFamily:V.font}}>
-{l.icon} {l.label}
-</button>
-))}
-</div>
-</div>
-<div style={{marginBottom:12}}>
-<div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:“uppercase”,letterSpacing:”.06em”,marginBottom:8}}>Priority</div>
-<div style={{display:“flex”,gap:6}}>
-{PRIORITIES.map(p=>(
-<button key={p.id} onClick={()=>setForm(f=>({…f,priority:p.id}))} style={{flex:1,padding:“8px”,borderRadius:10,border:“1px solid “+(form.priority===p.id?p.color:V.cardBorder),background:form.priority===p.id?p.color+“15”:“transparent”,color:form.priority===p.id?p.color:V.text3,fontSize:12,fontWeight:700,cursor:“pointer”,fontFamily:V.font}}>
-{p.label}
-</button>
-))}
-</div>
-</div>
-<div style={{display:“grid”,gridTemplateColumns:“1fr 1fr”,gap:10}}>
-<Field label=“Date” type=“date” value={form.date} onChange={v=>setForm(f=>({…f,date:v}))}/>
-<Field label=“Time” type=“time” value={form.time} onChange={v=>setForm(f=>({…f,time:v}))}/>
-</div>
-<div style={{marginBottom:12}}>
-<div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:“uppercase”,letterSpacing:”.06em”,marginBottom:8}}>Repeat</div>
-<div style={{display:“flex”,gap:6,flexWrap:“wrap”}}>
-{RECURS.map(rec=>(
-<button key={rec.id} onClick={()=>setForm(f=>({…f,recur:rec.id}))} style={{padding:“7px 14px”,borderRadius:16,border:“1px solid “+(form.recur===rec.id?V.accent:V.cardBorder),background:form.recur===rec.id?V.accent+“12”:“transparent”,color:form.recur===rec.id?V.accent:V.text3,fontSize:12,fontWeight:600,cursor:“pointer”,fontFamily:V.font}}>
-{rec.label}
-</button>
-))}
-</div>
-</div>
-<SubtasksEditor subtasks={form.subtasks} onChange={subs=>setForm(f=>({…f,subtasks:subs}))}/>
-<Field label=“Notes (optional)” value={form.notes} onChange={v=>setForm(f=>({…f,notes:v}))} rows={3} placeholder=“Any extra details?”/>
-</Sheet>
-);
+  const [form,setForm]=useState({
+    title:r?r.title:"",list:r?r.list:"personal",priority:r?r.priority:"medium",
+    date:r?r.date:todayStr(),time:r?r.time:"",notes:r?r.notes:"",
+    recur:r?r.recur:"none",subtasks:r?r.subtasks:[],tags:r?r.tags||[]:[]
+  });
+  const save=()=>{
+    if(!form.title.trim())return;
+    const saved={...r,...form,id:r?r.id:uid(),done:r?r.done:false,createdAt:r?r.createdAt:new Date().toISOString()};
+    onSave(saved);
+    Notif.schedule(saved);
+    onClose();
+  };
+  return(
+    <Sheet title={r?"Edit Reminder":"New Reminder"} onClose={onClose} footer={<Btn full onClick={save} disabled={!form.title.trim()}>{r?"Save Changes":"Add Reminder"}</Btn>}>
+      <Field label="Title" value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="What do you need to do?" autoFocus/>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>List</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {lists.map(l=>(
+            <button key={l.id} onClick={()=>setForm(f=>({...f,list:l.id}))} style={{padding:"7px 12px",borderRadius:16,border:"1px solid "+(form.list===l.id?l.color:V.cardBorder),background:form.list===l.id?l.color+"15":"transparent",color:form.list===l.id?l.color:V.text3,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:V.font}}>
+              {l.icon} {l.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Priority</div>
+        <div style={{display:"flex",gap:6}}>
+          {PRIORITIES.map(p=>(
+            <button key={p.id} onClick={()=>setForm(f=>({...f,priority:p.id}))} style={{flex:1,padding:"8px",borderRadius:10,border:"1px solid "+(form.priority===p.id?p.color:V.cardBorder),background:form.priority===p.id?p.color+"15":"transparent",color:form.priority===p.id?p.color:V.text3,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:V.font}}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Field label="Date" type="date" value={form.date} onChange={v=>setForm(f=>({...f,date:v}))}/>
+        <Field label="Time" type="time" value={form.time} onChange={v=>setForm(f=>({...f,time:v}))}/>
+      </div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Repeat</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {RECURS.map(rec=>(
+            <button key={rec.id} onClick={()=>setForm(f=>({...f,recur:rec.id}))} style={{padding:"7px 14px",borderRadius:16,border:"1px solid "+(form.recur===rec.id?V.accent:V.cardBorder),background:form.recur===rec.id?V.accent+"12":"transparent",color:form.recur===rec.id?V.accent:V.text3,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:V.font}}>
+              {rec.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <SubtasksEditor subtasks={form.subtasks} onChange={subs=>setForm(f=>({...f,subtasks:subs}))}/>
+      <TagEditor tags={form.tags} onChange={tgs=>setForm(f=>({...f,tags:tgs}))}/>
+      <Field label="Notes (optional)" value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} rows={3} placeholder="Any extra details?"/>
+    </Sheet>
+  );
 }
 
 // ─── Search Sheet ───
 function SearchSheet({s,d,onClose}){
-const [q,setQ]=useState(””);
-const inp=useRef(null);
-const [showEdit,setShowEdit]=useState(null);
-useEffect(()=>{setTimeout(()=>{if(inp.current)inp.current.focus();},100);},[]);
-const results=useMemo(()=>{
-if(!q.trim())return[];
-const query=q.toLowerCase();
-return s.reminders.filter(r=>
-r.title.toLowerCase().includes(query)||
-(r.notes||””).toLowerCase().includes(query)||
-(r.subtasks||[]).some(st=>st.text.toLowerCase().includes(query))
-).slice(0,30);
-},[q,s.reminders]);
-return(
-<Sheet title="Search" onClose={onClose}>
-<div style={{position:“relative”,marginBottom:16}}>
-<input ref={inp} value={q} onChange={e=>setQ(e.target.value)} placeholder=“Search reminders…”
-style={{width:“100%”,padding:“12px 14px 12px 40px”,background:“rgba(255,255,255,0.05)”,border:“1px solid “+V.cardBorder,borderRadius:12,color:V.text,fontSize:15,fontFamily:V.font,outline:“none”,minHeight:44}}/>
-<svg style={{position:“absolute”,left:14,top:14}} width={16} height={16} viewBox=“0 0 24 24” fill=“none” stroke={V.text3} strokeWidth=“2” strokeLinecap=“round”><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-</div>
-{results.length>0?(
-<div style={{display:“flex”,flexDirection:“column”,gap:2}}>
-{results.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
-onToggle={(id)=>{d({type:“TOGGLE”,id});Haptic.success();}}
-onDelete={(id)=>d({type:“DELETE”,id})}
-onEdit={(r)=>setShowEdit(r)}/>)}
-</div>
-):q.trim()?(
-<div style={{textAlign:“center”,padding:“40px 20px”,color:V.text3}}>
-<div style={{fontSize:36,marginBottom:8}}>🔍</div>
-<div style={{fontSize:13}}>No results for “{q}”</div>
-</div>
-):null}
-{showEdit&&<EditSheet r={showEdit} lists={s.lists} onSave={(u)=>{d({type:“UPDATE”,r:u});Toast.show(“Updated”,V.accent);}} onClose={()=>setShowEdit(null)}/>}
-</Sheet>
-);
+  const [q,setQ]=useState("");
+  const inp=useRef(null);
+  const [showEdit,setShowEdit]=useState(null);
+  useEffect(()=>{setTimeout(()=>{if(inp.current)inp.current.focus();},100);},[]);
+  const results=useMemo(()=>{
+    if(!q.trim())return[];
+    const query=q.toLowerCase();
+    return s.reminders.filter(r=>
+      r.title.toLowerCase().includes(query)||
+      (r.notes||"").toLowerCase().includes(query)||
+      (r.tags||[]).some(t=>t.includes(query))||
+      (r.subtasks||[]).some(st=>st.text.toLowerCase().includes(query))
+    ).slice(0,30);
+  },[q,s.reminders]);
+  return(
+    <Sheet title="Search" onClose={onClose}>
+      <div style={{position:"relative",marginBottom:16}}>
+        <input ref={inp} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search reminders..."
+          style={{width:"100%",padding:"12px 14px 12px 40px",background:"rgba(255,255,255,0.05)",border:"1px solid "+V.cardBorder,borderRadius:12,color:V.text,fontSize:15,fontFamily:V.font,outline:"none",minHeight:44}}/>
+        <svg style={{position:"absolute",left:14,top:14}} width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      {results.length>0?(
+        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+          {results.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
+            onToggle={(id)=>{d({type:"TOGGLE",id});Haptic.success();}}
+            onDelete={(id)=>d({type:"DELETE",id})}
+            onEdit={(r)=>setShowEdit(r)}/>)}
+        </div>
+      ):q.trim()?(
+        <div style={{textAlign:"center",padding:"40px 20px",color:V.text3}}>
+          <div style={{fontSize:36,marginBottom:8}}>🔍</div>
+          <div style={{fontSize:13}}>No results for "{q}"</div>
+        </div>
+      ):null}
+      {showEdit&&<EditSheet r={showEdit} lists={s.lists} onSave={(u)=>{d({type:"UPDATE",r:u});Toast.show("Updated",V.accent);}} onClose={()=>setShowEdit(null)}/>}
+    </Sheet>
+  );
 }
 
 // ─── Sort Selector ───
 function SortSelector({sort,setSort}){
-return(
-<div style={{display:“flex”,gap:4,overflowX:“auto”,WebkitOverflowScrolling:“touch”,paddingBottom:2}}>
-{SORT_OPTIONS.map(o=>(
-<button key={o.id} onClick={()=>setSort(sort===o.id?null:o.id)} style={{padding:“4px 10px”,borderRadius:12,border:“none”,fontSize:10,fontWeight:600,fontFamily:V.font,cursor:“pointer”,background:sort===o.id?V.accent+“15”:“rgba(255,255,255,0.03)”,color:sort===o.id?V.accent:V.text3,whiteSpace:“nowrap”}}>
-{o.label}{sort===o.id?” ↓”:””}
-</button>
-))}
-</div>
-);
+  return(
+    <div style={{display:"flex",gap:4,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+      {SORT_OPTIONS.map(o=>(
+        <button key={o.id} onClick={()=>setSort(sort===o.id?null:o.id)} style={{padding:"4px 10px",borderRadius:12,border:"none",fontSize:10,fontWeight:600,fontFamily:V.font,cursor:"pointer",background:sort===o.id?V.accent+"15":"rgba(255,255,255,0.03)",color:sort===o.id?V.accent:V.text3,whiteSpace:"nowrap"}}>
+          {o.label}{sort===o.id?" ↓":""}
+        </button>
+      ))}
+    </div>
+  );
 }
 function sortReminders(arr,sort){
-if(!sort)return arr;
-const priOrder={high:0,medium:1,low:2};
-return[…arr].sort((a,b)=>{
-if(sort===“date”)return(a.date||“9”).localeCompare(b.date||“9”);
-if(sort===“priority”)return(priOrder[a.priority]||1)-(priOrder[b.priority]||1);
-if(sort===“name”)return a.title.localeCompare(b.title);
-if(sort===“created”)return(b.createdAt||””).localeCompare(a.createdAt||””);
-return 0;
-});
+  if(!sort)return arr;
+  const priOrder={high:0,medium:1,low:2};
+  return[...arr].sort((a,b)=>{
+    if(sort==="date")return(a.date||"9").localeCompare(b.date||"9");
+    if(sort==="priority")return(priOrder[a.priority]||1)-(priOrder[b.priority]||1);
+    if(sort==="name")return a.title.localeCompare(b.title);
+    if(sort==="created")return(b.createdAt||"").localeCompare(a.createdAt||"");
+    return 0;
+  });
 }
 
 // ─── State ───
-const init={tab:“today”,reminders:[],lists:[…DEFAULT_LISTS],loaded:false};
+const init={tab:"today",reminders:[],lists:[...DEFAULT_LISTS],loaded:false};
 function reducer(s,a){
-switch(a.type){
-case “INIT”:return{…s,…a.p,loaded:true};
-case “TAB”:return{…s,tab:a.tab};
-case “ADD”:return{…s,reminders:[a.r,…s.reminders]};
-case “UPDATE”:return{…s,reminders:s.reminders.map(r=>r.id===a.r.id?a.r:r)};
-case “RESTORE”:return{…s,reminders:[a.r,…s.reminders]};
-case “TOGGLE”:{
-const r=s.reminders.find(x=>x.id===a.id);
-if(!r)return s;
-const done=!r.done;
-let updated={…r,done,doneAt:done?new Date().toISOString():null};
-if(done&&r.recur&&r.recur!==“none”&&r.date){
-const dt=new Date(r.date+“T12:00:00”);
-if(r.recur===“daily”)dt.setDate(dt.getDate()+1);
-else if(r.recur===“weekly”)dt.setDate(dt.getDate()+7);
-else if(r.recur===“monthly”)dt.setMonth(dt.getMonth()+1);
-const nextDate=dt.toISOString().split(“T”)[0];
-const next={…r,id:uid(),date:nextDate,done:false,doneAt:null,createdAt:new Date().toISOString()};
-return{…s,reminders:[next,…s.reminders.map(x=>x.id===a.id?updated:x)]};
-}
-return{…s,reminders:s.reminders.map(x=>x.id===a.id?updated:x)};
-}
-case “SNOOZE”:{
-return{…s,reminders:s.reminders.map(r=>r.id===a.id?{…r,date:a.date,time:a.time||r.time}:r)};
-}
-case “DELETE”:return{…s,reminders:s.reminders.filter(r=>r.id!==a.id)};
-case “BULK_DELETE”:return{…s,reminders:s.reminders.filter(r=>!a.ids.includes(r.id))};
-case “BULK_COMPLETE”:return{…s,reminders:s.reminders.map(r=>a.ids.includes(r.id)?{…r,done:true,doneAt:new Date().toISOString()}:r)};
-case “BULK_MOVE”:return{…s,reminders:s.reminders.map(r=>a.ids.includes(r.id)?{…r,list:a.list}:r)};
-case “ADD_LIST”:return{…s,lists:[…s.lists,a.list]};
-case “DEL_LIST”:return{…s,lists:s.lists.filter(l=>l.id!==a.id),reminders:s.reminders.filter(r=>r.list!==a.id)};
-case “IMPORT”:return{…s,…a.data};
-default:return s;
-}
+  switch(a.type){
+    case "INIT":return{...s,...a.p,loaded:true};
+    case "TAB":return{...s,tab:a.tab};
+    case "ADD":return{...s,reminders:[a.r,...s.reminders]};
+    case "UPDATE":return{...s,reminders:s.reminders.map(r=>r.id===a.r.id?a.r:r)};
+    case "RESTORE":return{...s,reminders:[a.r,...s.reminders]};
+    case "TOGGLE":{
+      const r=s.reminders.find(x=>x.id===a.id);
+      if(!r)return s;
+      const done=!r.done;
+      let updated={...r,done,doneAt:done?new Date().toISOString():null};
+      if(done&&r.recur&&r.recur!=="none"&&r.date){
+        const dt=new Date(r.date+"T12:00:00");
+        if(r.recur==="daily")dt.setDate(dt.getDate()+1);
+        else if(r.recur==="weekly")dt.setDate(dt.getDate()+7);
+        else if(r.recur==="monthly")dt.setMonth(dt.getMonth()+1);
+        const nextDate=dt.toISOString().split("T")[0];
+        const next={...r,id:uid(),date:nextDate,done:false,doneAt:null,createdAt:new Date().toISOString()};
+        return{...s,reminders:[next,...s.reminders.map(x=>x.id===a.id?updated:x)]};
+      }
+      return{...s,reminders:s.reminders.map(x=>x.id===a.id?updated:x)};
+    }
+    case "SNOOZE":{
+      return{...s,reminders:s.reminders.map(r=>r.id===a.id?{...r,date:a.date,time:a.time||r.time}:r)};
+    }
+    case "DELETE":return{...s,reminders:s.reminders.filter(r=>r.id!==a.id)};
+    case "BULK_DELETE":return{...s,reminders:s.reminders.filter(r=>!a.ids.includes(r.id))};
+    case "BULK_COMPLETE":return{...s,reminders:s.reminders.map(r=>a.ids.includes(r.id)?{...r,done:true,doneAt:new Date().toISOString()}:r)};
+    case "BULK_MOVE":return{...s,reminders:s.reminders.map(r=>a.ids.includes(r.id)?{...r,list:a.list}:r)};
+    case "ADD_LIST":return{...s,lists:[...s.lists,a.list]};
+    case "DEL_LIST":return{...s,lists:s.lists.filter(l=>l.id!==a.id),reminders:s.reminders.filter(r=>r.list!==a.id)};
+    case "IMPORT":return{...s,...a.data};
+    default:return s;
+  }
 }
 
 // ─── Calendar View ───
 function CalendarView({reminders,onDateClick}){
-const [month,setMonth]=useState(()=>{const now=new Date();return{year:now.getFullYear(),month:now.getMonth()};});
-const daysInMonth=new Date(month.year,month.month+1,0).getDate();
-const firstDay=new Date(month.year,month.month,1).getDay();
-const days=[];
-for(let i=0;i<firstDay;i++)days.push(null);
-for(let i=1;i<=daysInMonth;i++)days.push(i);
-const monthName=new Date(month.year,month.month,1).toLocaleDateString(“en-US”,{month:“long”,year:“numeric”});
-const today=todayStr();
-const prev=()=>{setMonth(m=>m.month===0?{year:m.year-1,month:11}:{…m,month:m.month-1});};
-const next=()=>{setMonth(m=>m.month===11?{year:m.year+1,month:0}:{…m,month:m.month+1});};
+  const [month,setMonth]=useState(()=>{const now=new Date();return{year:now.getFullYear(),month:now.getMonth()};});
+  const daysInMonth=new Date(month.year,month.month+1,0).getDate();
+  const firstDay=new Date(month.year,month.month,1).getDay();
+  const days=[];
+  for(let i=0;i<firstDay;i++)days.push(null);
+  for(let i=1;i<=daysInMonth;i++)days.push(i);
+  const monthName=new Date(month.year,month.month,1).toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  const today=todayStr();
+  const prev=()=>{setMonth(m=>m.month===0?{year:m.year-1,month:11}:{...m,month:m.month-1});};
+  const next=()=>{setMonth(m=>m.month===11?{year:m.year+1,month:0}:{...m,month:m.month+1});};
 
-const remindersByDate=useMemo(()=>{
-const map={};
-reminders.filter(r=>!r.done).forEach(r=>{
-if(r.date){if(!map[r.date])map[r.date]=[];map[r.date].push(r);}
-});
-return map;
-},[reminders]);
+  const remindersByDate=useMemo(()=>{
+    const map={};
+    reminders.filter(r=>!r.done).forEach(r=>{
+      if(r.date){if(!map[r.date])map[r.date]=[];map[r.date].push(r);}
+    });
+    return map;
+  },[reminders]);
 
-return(
-<div style={{marginBottom:12}}>
-<div style={{display:“flex”,alignItems:“center”,justifyContent:“space-between”,marginBottom:12}}>
-<button onClick={prev} style={{background:“none”,border:“none”,cursor:“pointer”,padding:8,color:V.accent,fontSize:16}}>◀</button>
-<span style={{fontSize:14,fontWeight:700,color:V.text}}>{monthName}</span>
-<button onClick={next} style={{background:“none”,border:“none”,cursor:“pointer”,padding:8,color:V.accent,fontSize:16}}>▶</button>
-</div>
-<div style={{display:“grid”,gridTemplateColumns:“repeat(7,1fr)”,gap:2}}>
-{[“S”,“M”,“T”,“W”,“T”,“F”,“S”].map((d,i)=>(
-<div key={i} style={{textAlign:“center”,fontSize:10,fontWeight:700,color:V.text3,padding:“4px 0”}}>{d}</div>
-))}
-{days.map((day,i)=>{
-if(!day)return<div key={i}/>;
-const dateStr=month.year+”-”+String(month.month+1).padStart(2,“0”)+”-”+String(day).padStart(2,“0”);
-const count=(remindersByDate[dateStr]||[]).length;
-const isT=dateStr===today;
-return(
-<button key={i} onClick={()=>onDateClick(dateStr)} style={{
-display:“flex”,flexDirection:“column”,alignItems:“center”,justifyContent:“center”,
-padding:“6px 2px”,borderRadius:8,border:isT?“2px solid “+V.accent:“2px solid transparent”,
-background:count>0?V.accent+“10”:“transparent”,cursor:“pointer”,minHeight:36
-}}>
-<span style={{fontSize:12,fontWeight:isT?800:500,color:isT?V.accent:V.text}}>{day}</span>
-{count>0&&(
-<div style={{display:“flex”,gap:1,marginTop:2}}>
-{Array.from({length:Math.min(count,3)}).map((_,j)=>(
-<div key={j} style={{width:4,height:4,borderRadius:2,background:V.accent}}/>
-))}
-</div>
-)}
-</button>
-);
-})}
-</div>
-</div>
-);
+  return(
+    <div style={{marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <button onClick={prev} style={{background:"none",border:"none",cursor:"pointer",padding:8,color:V.accent,fontSize:16}}>◀</button>
+        <span style={{fontSize:14,fontWeight:700,color:V.text}}>{monthName}</span>
+        <button onClick={next} style={{background:"none",border:"none",cursor:"pointer",padding:8,color:V.accent,fontSize:16}}>▶</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+        {["S","M","T","W","T","F","S"].map((d,i)=>(
+          <div key={i} style={{textAlign:"center",fontSize:10,fontWeight:700,color:V.text3,padding:"4px 0"}}>{d}</div>
+        ))}
+        {days.map((day,i)=>{
+          if(!day)return<div key={i}/>;
+          const dateStr=month.year+"-"+String(month.month+1).padStart(2,"0")+"-"+String(day).padStart(2,"0");
+          const count=(remindersByDate[dateStr]||[]).length;
+          const isT=dateStr===today;
+          return(
+            <button key={i} onClick={()=>onDateClick(dateStr)} style={{
+              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+              padding:"6px 2px",borderRadius:8,border:isT?"2px solid "+V.accent:"2px solid transparent",
+              background:count>0?V.accent+"10":"transparent",cursor:"pointer",minHeight:36
+            }}>
+              <span style={{fontSize:12,fontWeight:isT?800:500,color:isT?V.accent:V.text}}>{day}</span>
+              {count>0&&(
+                <div style={{display:"flex",gap:1,marginTop:2}}>
+                  {Array.from({length:Math.min(count,3)}).map((_,j)=>(
+                    <div key={j} style={{width:4,height:4,borderRadius:2,background:V.accent}}/>
+                  ))}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // ─── Statistics Tab ───
 function StatsTab({s}){
-const reminders=s.reminders||[];
-const done=reminders.filter(r=>r.done);
-const active=reminders.filter(r=>!r.done);
-const total=reminders.length;
-const completionRate=total>0?Math.round(done.length/total*100):0;
+  const reminders=s.reminders||[];
+  const done=reminders.filter(r=>r.done);
+  const active=reminders.filter(r=>!r.done);
+  const total=reminders.length;
+  const completionRate=total>0?Math.round(done.length/total*100):0;
 
-const chartData=useMemo(()=>{
-const data=[];
-for(let i=13;i>=0;i–){
-const dt=new Date();dt.setDate(dt.getDate()-i);
-const ds=dt.toISOString().split(“T”)[0];
-const label=dt.toLocaleDateString(“en-US”,{month:“short”,day:“numeric”});
-const completed=done.filter(r=>r.doneAt&&r.doneAt.startsWith(ds)).length;
-const added=reminders.filter(r=>r.createdAt&&r.createdAt.startsWith(ds)).length;
-data.push({name:label,completed,added});
-}
-return data;
-},[reminders.length,done.length]);
+  const chartData=useMemo(()=>{
+    const data=[];
+    for(let i=13;i>=0;i--){
+      const dt=new Date();dt.setDate(dt.getDate()-i);
+      const ds=dt.toISOString().split("T")[0];
+      const label=dt.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+      const completed=done.filter(r=>r.doneAt&&r.doneAt.startsWith(ds)).length;
+      const added=reminders.filter(r=>r.createdAt&&r.createdAt.startsWith(ds)).length;
+      data.push({name:label,completed,added});
+    }
+    return data;
+  },[reminders.length,done.length]);
 
-const byList=useMemo(()=>{
-return s.lists.map(l=>({
-name:l.label,icon:l.icon,color:l.color,
-active:active.filter(r=>r.list===l.id).length,
-done:done.filter(r=>r.list===l.id).length,
-total:reminders.filter(r=>r.list===l.id).length,
-})).filter(l=>l.total>0);
-},[reminders.length,s.lists]);
+  const byList=useMemo(()=>{
+    return s.lists.map(l=>({
+      name:l.label,icon:l.icon,color:l.color,
+      active:active.filter(r=>r.list===l.id).length,
+      done:done.filter(r=>r.list===l.id).length,
+      total:reminders.filter(r=>r.list===l.id).length,
+    })).filter(l=>l.total>0);
+  },[reminders.length,s.lists]);
 
-const byPriority=useMemo(()=>{
-return PRIORITIES.map(p=>({
-name:p.label,color:p.color,
-value:active.filter(r=>r.priority===p.id).length,
-})).filter(p=>p.value>0);
-},[active.length]);
+  const byPriority=useMemo(()=>{
+    return PRIORITIES.map(p=>({
+      name:p.label,color:p.color,
+      value:active.filter(r=>r.priority===p.id).length,
+    })).filter(p=>p.value>0);
+  },[active.length]);
 
-const score=useMemo(()=>calcScore(s),[s.reminders.length,s.lists.length]);
+  const score=useMemo(()=>calcScore(s),[s.reminders.length,s.lists.length]);
 
-return(
-<div className=“fade-up” style={{display:“flex”,flexDirection:“column”,gap:14}}>
-<IronScoreCard score={score}/>
-<div style={{display:“grid”,gridTemplateColumns:“1fr 1fr 1fr”,gap:8}}>
-<div style={{padding:“14px 10px”,borderRadius:12,background:V.accent+“08”,border:“1px solid “+V.accent+“15”,textAlign:“center”}}>
-<div style={{fontSize:22,fontWeight:900,color:V.accent,fontFamily:V.mono}}>{active.length}</div>
-<div style={{fontSize:10,color:V.text3,fontWeight:600}}>Active</div>
-</div>
-<div style={{padding:“14px 10px”,borderRadius:12,background:V.green+“08”,border:“1px solid “+V.green+“15”,textAlign:“center”}}>
-<div style={{fontSize:22,fontWeight:900,color:V.green,fontFamily:V.mono}}>{done.length}</div>
-<div style={{fontSize:10,color:V.text3,fontWeight:600}}>Done</div>
-</div>
-<div style={{padding:“14px 10px”,borderRadius:12,background:V.purple+“08”,border:“1px solid “+V.purple+“15”,textAlign:“center”}}>
-<div style={{fontSize:22,fontWeight:900,color:V.purple,fontFamily:V.mono}}>{completionRate}%</div>
-<div style={{fontSize:10,color:V.text3,fontWeight:600}}>Rate</div>
-</div>
-</div>
-
-```
-  {score.streak>0&&(
-    <div style={{padding:"12px 16px",borderRadius:12,background:V.warn+"08",border:"1px solid "+V.warn+"15",display:"flex",alignItems:"center",gap:10}}>
-      <span style={{fontSize:24}}>🔥</span>
-      <div>
-        <div style={{fontSize:16,fontWeight:800,color:V.warn}}>{score.streak} day streak!</div>
-        <div style={{fontSize:11,color:V.text3}}>Keep completing reminders daily</div>
+  return(
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:14}}>
+      <IronScoreCard score={score}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        <div style={{padding:"14px 10px",borderRadius:12,background:V.accent+"08",border:"1px solid "+V.accent+"15",textAlign:"center"}}>
+          <div style={{fontSize:22,fontWeight:900,color:V.accent,fontFamily:V.mono}}>{active.length}</div>
+          <div style={{fontSize:10,color:V.text3,fontWeight:600}}>Active</div>
+        </div>
+        <div style={{padding:"14px 10px",borderRadius:12,background:V.green+"08",border:"1px solid "+V.green+"15",textAlign:"center"}}>
+          <div style={{fontSize:22,fontWeight:900,color:V.green,fontFamily:V.mono}}>{done.length}</div>
+          <div style={{fontSize:10,color:V.text3,fontWeight:600}}>Done</div>
+        </div>
+        <div style={{padding:"14px 10px",borderRadius:12,background:V.purple+"08",border:"1px solid "+V.purple+"15",textAlign:"center"}}>
+          <div style={{fontSize:22,fontWeight:900,color:V.purple,fontFamily:V.mono}}>{completionRate}%</div>
+          <div style={{fontSize:10,color:V.text3,fontWeight:600}}>Rate</div>
+        </div>
       </div>
-    </div>
-  )}
 
-  <div style={{padding:16,borderRadius:14,background:V.card,border:"1px solid "+V.cardBorder}}>
-    <div style={{fontSize:12,fontWeight:700,color:V.text,marginBottom:12}}>Last 14 Days</div>
-    <div style={{width:"100%",height:180}}>
-      {hasCharts?(
-      <ResponsiveContainer>
-        <BarChart data={chartData} barGap={2}>
-          <XAxis dataKey="name" tick={{fontSize:9,fill:V.text3}} axisLine={false} tickLine={false} interval={2}/>
-          <YAxis tick={{fontSize:9,fill:V.text3}} axisLine={false} tickLine={false} width={20} allowDecimals={false}/>
-          <Tooltip contentStyle={{background:V.bg,border:"1px solid "+V.cardBorder,borderRadius:8,fontSize:11,color:V.text}}/>
-          <Bar dataKey="completed" fill={V.green} radius={[3,3,0,0]} name="Completed"/>
-          <Bar dataKey="added" fill={V.accent} radius={[3,3,0,0]} name="Added"/>
-        </BarChart>
-      </ResponsiveContainer>
-      ):(
-      <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:V.text3,fontSize:11}}>Charts unavailable offline</div>
-      )}
-    </div>
-  </div>
-
-  {byList.length>0&&(
-    <div style={{padding:16,borderRadius:14,background:V.card,border:"1px solid "+V.cardBorder}}>
-      <div style={{fontSize:12,fontWeight:700,color:V.text,marginBottom:12}}>By List</div>
-      {byList.map((l,i)=>{
-        const pct=l.total>0?Math.round(l.done/l.total*100):0;
-        return(
-          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:i<byList.length-1?"1px solid "+V.cardBorder:"none"}}>
-            <span style={{fontSize:16}}>{l.icon}</span>
-            <div style={{flex:1}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                <span style={{fontSize:12,fontWeight:600,color:V.text}}>{l.name}</span>
-                <span style={{fontSize:11,color:V.text3}}>{l.done}/{l.total}</span>
-              </div>
-              <div style={{height:4,borderRadius:2,background:"rgba(255,255,255,0.06)"}}>
-                <div style={{height:"100%",borderRadius:2,width:pct+"%",background:l.color,transition:"width .5s"}}/>
-              </div>
-            </div>
+      {score.streak>0&&(
+        <div style={{padding:"12px 16px",borderRadius:12,background:V.warn+"08",border:"1px solid "+V.warn+"15",display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:24}}>🔥</span>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,color:V.warn}}>{score.streak} day streak!</div>
+            <div style={{fontSize:11,color:V.text3}}>Keep completing reminders daily</div>
           </div>
-        );
-      })}
-    </div>
-  )}
+        </div>
+      )}
 
-  {byPriority.length>0&&(
-    <div style={{padding:16,borderRadius:14,background:V.card,border:"1px solid "+V.cardBorder}}>
-      <div style={{fontSize:12,fontWeight:700,color:V.text,marginBottom:12}}>Active by Priority</div>
-      <div style={{display:"flex",justifyContent:"center"}}>
-        <div style={{width:160,height:160}}>
+      <div style={{padding:16,borderRadius:14,background:V.card,border:"1px solid "+V.cardBorder}}>
+        <div style={{fontSize:12,fontWeight:700,color:V.text,marginBottom:12}}>Last 14 Days</div>
+        <div style={{width:"100%",height:180}}>
           {hasCharts?(
           <ResponsiveContainer>
-            <PieChart>
-              <Pie data={byPriority} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={4} dataKey="value">
-                {byPriority.map((entry,i)=><Cell key={i} fill={entry.color}/>)}
-              </Pie>
+            <BarChart data={chartData} barGap={2}>
+              <XAxis dataKey="name" tick={{fontSize:9,fill:V.text3}} axisLine={false} tickLine={false} interval={2}/>
+              <YAxis tick={{fontSize:9,fill:V.text3}} axisLine={false} tickLine={false} width={20} allowDecimals={false}/>
               <Tooltip contentStyle={{background:V.bg,border:"1px solid "+V.cardBorder,borderRadius:8,fontSize:11,color:V.text}}/>
-            </PieChart>
+              <Bar dataKey="completed" fill={V.green} radius={[3,3,0,0]} name="Completed"/>
+              <Bar dataKey="added" fill={V.accent} radius={[3,3,0,0]} name="Added"/>
+            </BarChart>
           </ResponsiveContainer>
           ):(
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:V.text3,fontSize:11}}>Charts unavailable offline</div>
           )}
         </div>
       </div>
-      <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:8}}>
-        {byPriority.map((p,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
-            <div style={{width:8,height:8,borderRadius:2,background:p.color}}/>
-            <span style={{fontSize:10,color:V.text3}}>{p.name} ({p.value})</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
-</div>
-```
 
-);
+      {byList.length>0&&(
+        <div style={{padding:16,borderRadius:14,background:V.card,border:"1px solid "+V.cardBorder}}>
+          <div style={{fontSize:12,fontWeight:700,color:V.text,marginBottom:12}}>By List</div>
+          {byList.map((l,i)=>{
+            const pct=l.total>0?Math.round(l.done/l.total*100):0;
+            return(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:i<byList.length-1?"1px solid "+V.cardBorder:"none"}}>
+                <span style={{fontSize:16}}>{l.icon}</span>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:12,fontWeight:600,color:V.text}}>{l.name}</span>
+                    <span style={{fontSize:11,color:V.text3}}>{l.done}/{l.total}</span>
+                  </div>
+                  <div style={{height:4,borderRadius:2,background:"rgba(255,255,255,0.06)"}}>
+                    <div style={{height:"100%",borderRadius:2,width:pct+"%",background:l.color,transition:"width .5s"}}/>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {byPriority.length>0&&(
+        <div style={{padding:16,borderRadius:14,background:V.card,border:"1px solid "+V.cardBorder}}>
+          <div style={{fontSize:12,fontWeight:700,color:V.text,marginBottom:12}}>Active by Priority</div>
+          <div style={{display:"flex",justifyContent:"center"}}>
+            <div style={{width:160,height:160}}>
+              {hasCharts?(
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie data={byPriority} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={4} dataKey="value">
+                    {byPriority.map((entry,i)=><Cell key={i} fill={entry.color}/>)}
+                  </Pie>
+                  <Tooltip contentStyle={{background:V.bg,border:"1px solid "+V.cardBorder,borderRadius:8,fontSize:11,color:V.text}}/>
+                </PieChart>
+              </ResponsiveContainer>
+              ):(
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:V.text3,fontSize:11}}>Charts unavailable offline</div>
+              )}
+            </div>
+          </div>
+          <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:8}}>
+            {byPriority.map((p,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
+                <div style={{width:8,height:8,borderRadius:2,background:p.color}}/>
+                <span style={{fontSize:10,color:V.text3}}>{p.name} ({p.value})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Settings Sheet ───
 /* FIX 7: Accept onThemeChange prop so App can re-render after theme switch */
 function SettingsSheet({s,d,onClose,onThemeChange}){
-const [notifPerm,setNotifPerm]=useState(()=>Notif.supported()?(typeof Notification!==“undefined”?Notification.permission:“denied”):“unsupported”);
-const fileRef=useRef(null);
+  const [notifPerm,setNotifPerm]=useState(()=>Notif.supported()?(typeof Notification!=="undefined"?Notification.permission:"denied"):"unsupported");
+  const fileRef=useRef(null);
 
-const requestNotifs=async()=>{
-const granted=await Notif.request();
-setNotifPerm(granted?“granted”:“denied”);
-if(granted){Notif.scheduleAll(s.reminders);Toast.show(“Notifications enabled”,V.green);}
-};
+  const requestNotifs=async()=>{
+    const granted=await Notif.request();
+    setNotifPerm(granted?"granted":"denied");
+    if(granted){Notif.scheduleAll(s.reminders);Toast.show("Notifications enabled",V.green);}
+  };
 
-const exportData=()=>{
-const data=JSON.stringify({reminders:s.reminders,lists:s.lists,exportDate:new Date().toISOString()},null,2);
-const blob=new Blob([data],{type:“application/json”});
-const url=URL.createObjectURL(blob);
-const a=document.createElement(“a”);
-a.href=url;a.download=“reminderlog-backup-”+todayStr()+”.json”;
-a.click();URL.revokeObjectURL(url);
-Toast.show(“Exported!”,V.green);
-};
+  const exportData=()=>{
+    const data=JSON.stringify({reminders:s.reminders,lists:s.lists,exportDate:new Date().toISOString()},null,2);
+    const blob=new Blob([data],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download="reminderlog-backup-"+todayStr()+".json";
+    a.click();URL.revokeObjectURL(url);
+    Toast.show("Exported!",V.green);
+  };
 
-const importData=(e)=>{
-const file=e.target.files&&e.target.files[0];
-if(!file)return;
-const reader=new FileReader();
-reader.onload=(evt)=>{
-try{
-const data=JSON.parse(evt.target.result);
-if(data.reminders&&data.lists){
-Confirm.show(“Import data?”,“This will replace all current reminders and lists.”,()=>{
-d({type:“IMPORT”,data:{reminders:data.reminders,lists:data.lists}});
-Toast.show(“Imported!”,V.green);
-});
-}else{Toast.show(“Invalid file”,V.danger);}
-}catch(err){Toast.show(“Invalid JSON”,V.danger);}
-};
-reader.readAsText(file);
-};
+  const importData=(e)=>{
+    const file=e.target.files&&e.target.files[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=(evt)=>{
+      try{
+        const data=JSON.parse(evt.target.result);
+        if(data.reminders&&data.lists){
+          Confirm.show("Import data?","This will replace all current reminders and lists.",()=>{
+            d({type:"IMPORT",data:{reminders:data.reminders,lists:data.lists}});
+            Toast.show("Imported!",V.green);
+          });
+        }else{Toast.show("Invalid file",V.danger);}
+      }catch(err){Toast.show("Invalid JSON",V.danger);}
+    };
+    reader.readAsText(file);
+  };
 
-const clearAll=()=>{
-Confirm.show(“Clear all data?”,“This will permanently delete all reminders, lists, and settings. This cannot be undone.”,()=>{
-LS.set(“rl-reminders”,[]);
-LS.set(“rl-lists”,DEFAULT_LISTS);
-d({type:“IMPORT”,data:{reminders:[],lists:[…DEFAULT_LISTS]}});
-Toast.show(“All data cleared”,V.danger);
-});
-};
+  const clearAll=()=>{
+    Confirm.show("Clear all data?","This will permanently delete all reminders, lists, and settings. This cannot be undone.",()=>{
+      LS.set("rl-reminders",[]);
+      LS.set("rl-lists",DEFAULT_LISTS);
+      d({type:"IMPORT",data:{reminders:[],lists:[...DEFAULT_LISTS]}});
+      Toast.show("All data cleared",V.danger);
+    });
+  };
 
-return(
-<Sheet title="Settings" onClose={onClose}>
-<div style={{marginBottom:20}}>
-<div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:“uppercase”,letterSpacing:”.06em”,marginBottom:10}}>Appearance</div>
-<div style={{display:“flex”,gap:8}}>
-{[{id:“dark”,label:“Dark”,icon:“🌙”},{id:“light”,label:“Light”,icon:“☀️”}].map(t=>(
-<button key={t.id} onClick={()=>{setTheme(t.id,onThemeChange);Toast.show(“Theme: “+t.label,V.accent);}} style={{flex:1,padding:“14px”,borderRadius:12,border:“1px solid “+(V.mode===t.id?V.accent:V.cardBorder),background:V.mode===t.id?V.accent+“15”:“rgba(255,255,255,0.03)”,cursor:“pointer”,textAlign:“center”}}>
-<div style={{fontSize:24,marginBottom:4}}>{t.icon}</div>
-<div style={{fontSize:12,fontWeight:600,color:V.mode===t.id?V.accent:V.text3}}>{t.label}</div>
-</button>
-))}
-</div>
-</div>
-
-```
-  <div style={{marginBottom:20}}>
-    <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Notifications</div>
-    {notifPerm==="unsupported"?(
-      <div style={{padding:"12px 14px",borderRadius:12,background:"rgba(255,255,255,0.03)",border:"1px solid "+V.cardBorder}}>
-        <div style={{fontSize:13,color:V.text3}}>Notifications not supported in this browser</div>
+  return(
+    <Sheet title="Settings" onClose={onClose}>
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Mode</div>
+        <div style={{display:"flex",gap:8}}>
+          {[{id:"dark",label:"Dark",icon:"🌙"},{id:"light",label:"Light",icon:"☀️"}].map(t=>(
+            <button key={t.id} onClick={()=>{setTheme(t.id,V.accentId,onThemeChange);Toast.show(t.label+" mode",V.accent);}} style={{flex:1,padding:"14px",borderRadius:12,border:"1px solid "+(V.mode===t.id?V.accent:V.cardBorder),background:V.mode===t.id?V.accent+"15":"rgba(255,255,255,0.03)",cursor:"pointer",textAlign:"center"}}>
+              <div style={{fontSize:24,marginBottom:4}}>{t.icon}</div>
+              <div style={{fontSize:12,fontWeight:600,color:V.mode===t.id?V.accent:V.text3}}>{t.label}</div>
+            </button>
+          ))}
+        </div>
       </div>
-    ):notifPerm==="granted"?(
-      <div style={{padding:"12px 14px",borderRadius:12,background:V.green+"08",border:"1px solid "+V.green+"20",display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:16}}>🔔</span>
-        <div style={{fontSize:13,color:V.green,fontWeight:600}}>Notifications enabled</div>
+
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Accent Color</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+          {ACCENT_THEMES.map(t=>{
+            const active=V.accentId===t.id;
+            return(
+              <button key={t.id} onClick={()=>{setTheme(V.mode,t.id,onThemeChange);Toast.show(t.icon+" "+t.name,t.accent);}} style={{padding:"12px 8px",borderRadius:12,border:"2px solid "+(active?t.accent:V.cardBorder),background:active?t.accent+"15":"rgba(255,255,255,0.03)",cursor:"pointer",textAlign:"center",position:"relative"}}>
+                <div style={{display:"flex",justifyContent:"center",gap:3,marginBottom:5}}>
+                  <div style={{width:10,height:10,borderRadius:"50%",background:t.accent}}/>
+                  <div style={{width:10,height:10,borderRadius:"50%",background:t.green}}/>
+                  <div style={{width:10,height:10,borderRadius:"50%",background:t.purple}}/>
+                </div>
+                <div style={{fontSize:10,fontWeight:700,color:active?t.accent:V.text3}}>{t.icon} {t.name}</div>
+                {active&&<div style={{position:"absolute",top:5,right:5,width:6,height:6,borderRadius:"50%",background:t.accent}}/>}
+              </button>
+            );
+          })}
+        </div>
       </div>
-    ):(
-      <Btn v="secondary" full onClick={requestNotifs}>Enable Notifications</Btn>
-    )}
-  </div>
 
-  <div style={{marginBottom:20}}>
-    <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Data</div>
-    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      <Btn v="secondary" full onClick={exportData}>Export Data (JSON)</Btn>
-      <Btn v="secondary" full onClick={()=>{if(fileRef.current)fileRef.current.click();}}>Import Data</Btn>
-      <input ref={fileRef} type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
-      <Btn v="danger" full onClick={clearAll}>Clear All Data</Btn>
-    </div>
-  </div>
-
-  <div style={{marginBottom:20}}>
-    <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Info</div>
-    <div style={{padding:"12px 14px",borderRadius:12,background:"rgba(255,255,255,0.03)",border:"1px solid "+V.cardBorder}}>
-      <div style={{fontSize:12,color:V.text3,lineHeight:1.8}}>
-        Total reminders: {s.reminders.length}<br/>
-        Active: {s.reminders.filter(r=>!r.done).length}<br/>
-        Completed: {s.reminders.filter(r=>r.done).length}<br/>
-        Lists: {s.lists.length}
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Notifications</div>
+        {notifPerm==="unsupported"?(
+          <div style={{padding:"12px 14px",borderRadius:12,background:"rgba(255,255,255,0.03)",border:"1px solid "+V.cardBorder}}>
+            <div style={{fontSize:13,color:V.text3}}>Notifications not supported in this browser</div>
+          </div>
+        ):notifPerm==="granted"?(
+          <div style={{padding:"12px 14px",borderRadius:12,background:V.green+"08",border:"1px solid "+V.green+"20",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:16}}>🔔</span>
+            <div style={{fontSize:13,color:V.green,fontWeight:600}}>Notifications enabled</div>
+          </div>
+        ):(
+          <Btn v="secondary" full onClick={requestNotifs}>Enable Notifications</Btn>
+        )}
       </div>
-    </div>
-  </div>
 
-  <div style={{textAlign:"center",padding:"20px 0",opacity:.5}}>
-    <div style={{fontSize:11,color:V.text3}}>ReminderLog v2.0</div>
-    <div style={{fontSize:10,color:V.text3}}>Part of the IRONLOG ecosystem</div>
-  </div>
-</Sheet>
-```
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Data</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <Btn v="secondary" full onClick={exportData}>Export Data (JSON)</Btn>
+          <Btn v="secondary" full onClick={()=>{if(fileRef.current)fileRef.current.click();}}>Import Data</Btn>
+          <input ref={fileRef} type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
+          <Btn v="danger" full onClick={clearAll}>Clear All Data</Btn>
+        </div>
+      </div>
 
-);
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Info</div>
+        <div style={{padding:"12px 14px",borderRadius:12,background:"rgba(255,255,255,0.03)",border:"1px solid "+V.cardBorder}}>
+          <div style={{fontSize:12,color:V.text3,lineHeight:1.8}}>
+            Total reminders: {s.reminders.length}<br/>
+            Active: {s.reminders.filter(r=>!r.done).length} · Completed: {s.reminders.filter(r=>r.done).length}<br/>
+            Lists: {s.lists.length} · Tags: {[...new Set(s.reminders.flatMap(r=>r.tags||[]))].length} unique
+          </div>
+        </div>
+      </div>
+
+      <div style={{textAlign:"center",padding:"20px 0",opacity:.5}}>
+        <div style={{fontSize:11,color:V.text3}}>ReminderLog v3.0</div>
+        <div style={{fontSize:10,color:V.text3}}>Part of the IRONLOG ecosystem</div>
+      </div>
+    </Sheet>
+  );
 }
 
 // ─── Onboarding ───
 function Onboarding({onDone}){
-const [step,setStep]=useState(0);
-const steps=[
-{icon:“🔔”,title:“Welcome to ReminderLog”,desc:“Your powerful reminder app with gamification. Track tasks, earn XP, and level up!”},
-{icon:“✅”,title:“Quick Add”,desc:“Add reminders instantly from the quick-add bar. Assign to lists and set priorities.”},
-{icon:“👆”,title:“Swipe Actions”,desc:“Swipe right to complete, swipe left to delete. Tap to edit and add subtasks.”},
-{icon:“📊”,title:“Track Progress”,desc:“View stats, complete daily missions, and maintain your streak. Let’s get started!”},
-];
-const cur=steps[step];
-return ReactDOM.createPortal(
-<div style={{position:“fixed”,inset:0,zIndex:9999,background:V.bg,display:“flex”,flexDirection:“column”,alignItems:“center”,justifyContent:“center”,padding:32}}>
-<div style={{textAlign:“center”,maxWidth:320}}>
-<div style={{fontSize:64,marginBottom:16,animation:“fadeUp .4s ease”}} key={step}>{cur.icon}</div>
-<div style={{fontSize:22,fontWeight:800,color:V.text,marginBottom:8,animation:“fadeUp .4s ease .1s both”}} key={“t”+step}>{cur.title}</div>
-<div style={{fontSize:14,color:V.text3,lineHeight:1.6,marginBottom:32,animation:“fadeUp .4s ease .2s both”}} key={“d”+step}>{cur.desc}</div>
-<div style={{display:“flex”,gap:6,justifyContent:“center”,marginBottom:24}}>
-{steps.map((_,i)=><div key={i} style={{width:i===step?20:8,height:8,borderRadius:4,background:i===step?V.accent:V.cardBorder,transition:“all .3s”}}/>)}
-</div>
-{step<steps.length-1?(
-<Btn full onClick={()=>setStep(step+1)}>Next</Btn>
-):(
-<Btn full onClick={()=>{LS.set(“rl-onboarded”,true);onDone();}}>Get Started</Btn>
-)}
-{step<steps.length-1&&(
-<button onClick={()=>{LS.set(“rl-onboarded”,true);onDone();}} style={{marginTop:12,background:“none”,border:“none”,color:V.text3,fontSize:12,cursor:“pointer”,fontFamily:V.font}}>Skip</button>
-)}
-</div>
-</div>,
-document.body
-);
+  const [step,setStep]=useState(0);
+  const steps=[
+    {icon:"🔔",title:"Welcome to ReminderLog",desc:"Your powerful reminder app with gamification. Track tasks, earn XP, and level up!"},
+    {icon:"✅",title:"Quick Add",desc:"Add reminders instantly from the quick-add bar. Assign to lists and set priorities."},
+    {icon:"👆",title:"Swipe Actions",desc:"Swipe right to complete, swipe left to delete. Tap to edit and add subtasks."},
+    {icon:"📊",title:"Track Progress",desc:"View stats, complete daily missions, and maintain your streak. Let's get started!"},
+  ];
+  const cur=steps[step];
+  return ReactDOM.createPortal(
+    <div style={{position:"fixed",inset:0,zIndex:9999,background:V.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32}}>
+      <div style={{textAlign:"center",maxWidth:320}}>
+        <div style={{fontSize:64,marginBottom:16,animation:"fadeUp .4s ease"}} key={step}>{cur.icon}</div>
+        <div style={{fontSize:22,fontWeight:800,color:V.text,marginBottom:8,animation:"fadeUp .4s ease .1s both"}} key={"t"+step}>{cur.title}</div>
+        <div style={{fontSize:14,color:V.text3,lineHeight:1.6,marginBottom:32,animation:"fadeUp .4s ease .2s both"}} key={"d"+step}>{cur.desc}</div>
+        <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:24}}>
+          {steps.map((_,i)=><div key={i} style={{width:i===step?20:8,height:8,borderRadius:4,background:i===step?V.accent:V.cardBorder,transition:"all .3s"}}/>)}
+        </div>
+        {step<steps.length-1?(
+          <Btn full onClick={()=>setStep(step+1)}>Next</Btn>
+        ):(
+          <Btn full onClick={()=>{LS.set("rl-onboarded",true);onDone();}}>Get Started</Btn>
+        )}
+        {step<steps.length-1&&(
+          <button onClick={()=>{LS.set("rl-onboarded",true);onDone();}} style={{marginTop:12,background:"none",border:"none",color:V.text3,fontSize:12,cursor:"pointer",fontFamily:V.font}}>Skip</button>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
 }
 
 // ─── TODAY TAB ───
 function TodayTab({s,d,score,missions}){
-const [showEdit,setShowEdit]=useState(null);
-const [sort,setSort]=useState(null);
-const [snoozeTarget,setSnoozeTarget]=useState(null);
-const [bulkMode,setBulkMode]=useState(false);
-const [selected,setSelected]=useState(new Set());
-const today=todayStr();
-const overdue=sortReminders(s.reminders.filter(r=>!r.done&&isOverdue(r)),sort||“date”);
-const todayItems=sortReminders(s.reminders.filter(r=>!r.done&&r.date===today),sort||“priority”);
-const doneToday=s.reminders.filter(r=>r.done&&r.doneAt&&r.doneAt.startsWith(today));
-const completedPct=todayItems.length+doneToday.length>0?Math.round(doneToday.length/(todayItems.length+doneToday.length)*100):0;
-const h=new Date().getHours();
-const greet=h<12?“Good morning”:h<17?“Good afternoon”:“Good evening”;
-
-const toggleSelect=(id)=>{const n=new Set(selected);if(n.has(id))n.delete(id);else n.add(id);setSelected(n);};
-const bulkComplete=()=>{if(selected.size===0)return;d({type:“BULK_COMPLETE”,ids:[…selected]});Toast.show(selected.size+” completed”,V.green);setBulkMode(false);setSelected(new Set());};
-const bulkDelete=()=>{if(selected.size===0)return;Confirm.show(“Delete “+selected.size+” reminders?”,””,()=>{d({type:“BULK_DELETE”,ids:[…selected]});Toast.show(selected.size+” deleted”,V.danger);setBulkMode(false);setSelected(new Set());});};
-
-const makeDeleteHandler=(id)=>{
-const backup=s.reminders.find(x=>x.id===id);
-d({type:“DELETE”,id});
-if(backup)UndoMgr.show(“Reminder deleted”,()=>d({type:“RESTORE”,r:backup}),V.danger);
-};
-
-return(
-<div className=“fade-up” style={{display:“flex”,flexDirection:“column”,gap:12}}>
-<div style={{display:“flex”,alignItems:“center”,gap:8,padding:“8px 12px”,borderRadius:12,background:score.rank.color+“10”,border:“1px solid “+score.rank.color+“25”,cursor:“pointer”}}>
-<IronScoreCard score={score} compact={true}/>
-<div style={{marginLeft:“auto”,fontSize:9,color:V.text3,textAlign:“right”}}>Level {score.rank.level}<br/>{score.pct}% to next</div>
-</div>
-<MissionsPanel missions={missions}/>
-<QuickAdd lists={s.lists} onAdd={(r)=>d({type:“ADD”,r})}/>
-
-```
-  <div style={{padding:"10px 0 2px"}}>
-    <div style={{fontSize:20,fontWeight:800,color:V.text}}>{greet} 👋</div>
-    <div style={{fontSize:12,color:V.text3}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div>
-  </div>
-
-  <div style={{display:"flex",alignItems:"center",gap:6}}>
-    <SortSelector sort={sort} setSort={setSort}/>
-    <button onClick={()=>{setBulkMode(!bulkMode);setSelected(new Set());}} style={{marginLeft:"auto",padding:"4px 10px",borderRadius:12,border:"none",fontSize:10,fontWeight:600,fontFamily:V.font,cursor:"pointer",background:bulkMode?V.accent+"15":"rgba(255,255,255,0.03)",color:bulkMode?V.accent:V.text3}}>
-      {bulkMode?"Cancel":"Select"}
-    </button>
-  </div>
-
-  {bulkMode&&selected.size>0&&(
-    <div style={{display:"flex",gap:6}}>
-      <Btn v="small" s={{flex:1}} onClick={bulkComplete}>Complete ({selected.size})</Btn>
-      <Btn v="danger" s={{flex:1,minHeight:36,fontSize:12,borderRadius:10,padding:"8px 14px"}} onClick={bulkDelete}>Delete ({selected.size})</Btn>
-    </div>
-  )}
-
-  {(todayItems.length+doneToday.length)>0&&(
-    <div style={{padding:"12px 14px",borderRadius:12,background:V.accent+"06",border:"1px solid "+V.accent+"15"}}>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-        <span style={{fontSize:12,color:V.text2,fontWeight:600}}>Today's progress</span>
-        <span style={{fontSize:12,color:V.accent,fontWeight:700,fontFamily:V.mono}}>{doneToday.length}/{todayItems.length+doneToday.length}</span>
+  const[showEdit,setShowEdit]=useState(null);
+  const[sort,setSort]=useState(null);
+  const[snoozeTarget,setSnoozeTarget]=useState(null);
+  const[bulkMode,setBulkMode]=useState(false);
+  const[selected,setSelected]=useState(new Set());
+  const[activeTag,setActiveTag]=useState(null);
+  const today=todayStr();
+  const allTags=useMemo(()=>{const set=new Set();s.reminders.filter(r=>!r.done).forEach(r=>(r.tags||[]).forEach(t=>set.add(t)));return[...set].sort();},[s.reminders]);
+  let overdueItems=sortReminders(s.reminders.filter(r=>!r.done&&isOverdue(r)),sort||"date");
+  let todayItems=sortReminders(s.reminders.filter(r=>!r.done&&r.date===today),sort||"priority");
+  if(activeTag){overdueItems=overdueItems.filter(r=>(r.tags||[]).includes(activeTag));todayItems=todayItems.filter(r=>(r.tags||[]).includes(activeTag));}
+  const doneToday=s.reminders.filter(r=>r.done&&r.doneAt&&r.doneAt.startsWith(today));
+  const totalRing=todayItems.length+doneToday.length;
+  const completedPct=totalRing>0?Math.round(doneToday.length/totalRing*100):0;
+  const toggleSelect=(id)=>{const n=new Set(selected);if(n.has(id))n.delete(id);else n.add(id);setSelected(n);};
+  const bulkComplete=()=>{if(!selected.size)return;d({type:"BULK_COMPLETE",ids:[...selected]});Toast.show(selected.size+" completed",V.green);setBulkMode(false);setSelected(new Set());};
+  const bulkDelete=()=>{if(!selected.size)return;Confirm.show("Delete "+selected.size+" reminders?","",()=>{d({type:"BULK_DELETE",ids:[...selected]});Toast.show(selected.size+" deleted",V.danger);setBulkMode(false);setSelected(new Set());});};
+  const mkDelete=(id)=>{const bk=s.reminders.find(x=>x.id===id);d({type:"DELETE",id});if(bk)UndoMgr.show("Deleted",()=>d({type:"RESTORE",r:bk}),V.danger);};
+  return(
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:12}}>
+      <TodayHeroCard score={score} doneCount={doneToday.length} totalCount={totalRing} overdueCount={overdueItems.length}/>
+      <MissionsPanel missions={missions}/>
+      <QuickAdd lists={s.lists} onAdd={(r)=>d({type:"ADD",r})}/>
+      {allTags.length>0&&<TagFilterBar allTags={allTags} activeTag={activeTag} setActiveTag={setActiveTag}/>}
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <SortSelector sort={sort} setSort={setSort}/>
+        <button onClick={()=>{setBulkMode(!bulkMode);setSelected(new Set());}} style={{marginLeft:"auto",padding:"4px 10px",borderRadius:12,border:"none",fontSize:10,fontWeight:600,fontFamily:V.font,cursor:"pointer",background:bulkMode?V.accent+"15":"rgba(255,255,255,0.03)",color:bulkMode?V.accent:V.text3}}>{bulkMode?"Cancel":"Select"}</button>
       </div>
-      <div style={{width:"100%",height:6,borderRadius:3,background:"rgba(255,255,255,0.05)"}}>
-        <div style={{height:"100%",borderRadius:3,width:completedPct+"%",background:"linear-gradient(90deg,"+V.accent+","+V.accent2+")",transition:"width .5s"}}/>
-      </div>
+      {bulkMode&&selected.size>0&&(<div style={{display:"flex",gap:6}}><Btn v="small" s={{flex:1}} onClick={bulkComplete}>Complete ({selected.size})</Btn><Btn v="danger" s={{flex:1,minHeight:36,fontSize:12,borderRadius:10,padding:"8px 14px"}} onClick={bulkDelete}>Delete ({selected.size})</Btn></div>)}
+      {totalRing>0&&(
+        <div style={{padding:"10px 14px",borderRadius:12,background:V.accent+"06",border:"1px solid "+V.accent+"15"}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}><span style={{fontSize:11,color:V.text2,fontWeight:600}}>Today's progress</span><span style={{fontSize:11,color:V.accent,fontWeight:700,fontFamily:V.mono}}>{doneToday.length}/{totalRing}</span></div>
+          <div style={{width:"100%",height:5,borderRadius:3,background:"rgba(255,255,255,0.05)"}}><div style={{height:"100%",borderRadius:3,width:completedPct+"%",background:"linear-gradient(90deg,"+V.accent+","+V.accent2+")",transition:"width .6s ease"}}/></div>
+        </div>
+      )}
+      {overdueItems.length>0&&(<div><div style={{fontSize:10,fontWeight:700,color:V.danger,letterSpacing:".06em",marginBottom:4}}>⚠️ OVERDUE ({overdueItems.length})</div>{overdueItems.map(r=><ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>d({type:"TOGGLE",id})} onDelete={mkDelete} onEdit={(r)=>setShowEdit(r)} onSnooze={(r)=>setSnoozeTarget(r)} bulkMode={bulkMode} selected={selected.has(r.id)} onSelect={toggleSelect}/>)}</div>)}
+      {todayItems.length>0&&(<div><div style={{fontSize:10,fontWeight:700,color:V.text3,letterSpacing:".06em",marginBottom:4}}>TODAY ({todayItems.length})</div>{todayItems.map(r=><ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>d({type:"TOGGLE",id})} onDelete={mkDelete} onEdit={(r)=>setShowEdit(r)} onSnooze={(r)=>setSnoozeTarget(r)} bulkMode={bulkMode} selected={selected.has(r.id)} onSelect={toggleSelect}/>)}</div>)}
+      {doneToday.length>0&&(<div style={{opacity:.55}}><div style={{fontSize:10,fontWeight:700,color:V.text3,letterSpacing:".06em",marginBottom:4}}>COMPLETED ({doneToday.length})</div>{doneToday.map(r=><ReminderRow key={r.id} r={r} lists={s.lists} onToggle={(id)=>d({type:"TOGGLE",id})} onDelete={(id)=>d({type:"DELETE",id})} onEdit={(r)=>setShowEdit(r)}/>)}</div>)}
+      {overdueItems.length===0&&todayItems.length===0&&doneToday.length===0&&(<div style={{textAlign:"center",padding:"40px 20px",color:V.text3}}><div style={{fontSize:48,marginBottom:12}}>✨</div><div style={{fontSize:15,fontWeight:600,color:V.text2,marginBottom:6}}>All clear!</div><div style={{fontSize:13}}>Nothing due today. Add one above.</div></div>)}
+      {showEdit&&<EditSheet r={showEdit} lists={s.lists} onSave={(u)=>{d({type:"UPDATE",r:u});Toast.show("Updated",V.accent);}} onClose={()=>setShowEdit(null)}/>}
+      {snoozeTarget&&<SnoozeMenu onSnooze={(date,time)=>{d({type:"SNOOZE",id:snoozeTarget.id,date,time});Toast.show("Snoozed → "+fmtDate(date),V.accent);}} onClose={()=>setSnoozeTarget(null)}/>}
     </div>
-  )}
-
-  {overdue.length>0&&(
-    <div>
-      <div style={{fontSize:10,fontWeight:700,color:V.danger,letterSpacing:".06em",marginBottom:4}}>⚠️ OVERDUE ({overdue.length})</div>
-      {overdue.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
-        onToggle={(id)=>{d({type:"TOGGLE",id});Haptic.success();}}
-        onDelete={makeDeleteHandler}
-        onEdit={(r)=>setShowEdit(r)}
-        onSnooze={(r)=>setSnoozeTarget(r)}
-        bulkMode={bulkMode} selected={selected.has(r.id)} onSelect={toggleSelect}/>)}
-    </div>
-  )}
-
-  {todayItems.length>0&&(
-    <div>
-      <div style={{fontSize:10,fontWeight:700,color:V.text3,letterSpacing:".06em",marginBottom:4}}>TODAY ({todayItems.length})</div>
-      {todayItems.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
-        onToggle={(id)=>{d({type:"TOGGLE",id});Haptic.success();}}
-        onDelete={makeDeleteHandler}
-        onEdit={(r)=>setShowEdit(r)}
-        onSnooze={(r)=>setSnoozeTarget(r)}
-        bulkMode={bulkMode} selected={selected.has(r.id)} onSelect={toggleSelect}/>)}
-    </div>
-  )}
-
-  {doneToday.length>0&&(
-    <div style={{opacity:.6}}>
-      <div style={{fontSize:10,fontWeight:700,color:V.text3,letterSpacing:".06em",marginBottom:4}}>COMPLETED ({doneToday.length})</div>
-      {doneToday.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
-        onToggle={(id)=>d({type:"TOGGLE",id})}
-        onDelete={(id)=>d({type:"DELETE",id})}
-        onEdit={(r)=>setShowEdit(r)}/>)}
-    </div>
-  )}
-
-  {overdue.length===0&&todayItems.length===0&&doneToday.length===0&&(
-    <div style={{textAlign:"center",padding:"40px 20px",color:V.text3}}>
-      <div style={{fontSize:48,marginBottom:12}}>✨</div>
-      <div style={{fontSize:15,fontWeight:600,color:V.text2,marginBottom:6}}>All clear!</div>
-      <div style={{fontSize:13}}>Nothing due today. Add a reminder above.</div>
-    </div>
-  )}
-
-  {showEdit&&<EditSheet r={showEdit} lists={s.lists} onSave={(u)=>{d({type:"UPDATE",r:u});Toast.show("Updated",V.accent);}} onClose={()=>setShowEdit(null)}/>}
-  {snoozeTarget&&<SnoozeMenu onSnooze={(date,time)=>{d({type:"SNOOZE",id:snoozeTarget.id,date,time});Toast.show("Snoozed to "+fmtDate(date),V.accent);}} onClose={()=>setSnoozeTarget(null)}/>}
-</div>
-```
-
-);
+  );
 }
 
 // ─── UPCOMING TAB ───
 function UpcomingTab({s,d}){
-const [showEdit,setShowEdit]=useState(null);
-const [filterList,setFilterList]=useState(“all”);
-const [sort,setSort]=useState(null);
-const [viewMode,setViewMode]=useState(“list”);
-const [snoozeTarget,setSnoozeTarget]=useState(null);
-const [selectedDate,setSelectedDate]=useState(null);
-const today=todayStr();
+  const [showEdit,setShowEdit]=useState(null);
+  const [filterList,setFilterList]=useState("all");
+  const [sort,setSort]=useState(null);
+  const [viewMode,setViewMode]=useState("list");
+  const [snoozeTarget,setSnoozeTarget]=useState(null);
+  const [selectedDate,setSelectedDate]=useState(null);
+  const today=todayStr();
 
-let upcoming=s.reminders.filter(r=>!r.done&&r.date>today).filter(r=>filterList===“all”||r.list===filterList);
-if(selectedDate)upcoming=upcoming.filter(r=>r.date===selectedDate);
-upcoming=sortReminders(upcoming,sort||“date”);
-const noDate=s.reminders.filter(r=>!r.done&&!r.date).filter(r=>filterList===“all”||r.list===filterList);
+  let upcoming=s.reminders.filter(r=>!r.done&&r.date>today).filter(r=>filterList==="all"||r.list===filterList);
+  if(selectedDate)upcoming=upcoming.filter(r=>r.date===selectedDate);
+  upcoming=sortReminders(upcoming,sort||"date");
+  const noDate=s.reminders.filter(r=>!r.done&&!r.date).filter(r=>filterList==="all"||r.list===filterList);
 
-/* FIX 8: useMemo now depends on stable values, not array reference of `upcoming` */
-const grouped=useMemo(()=>{
-const base=s.reminders.filter(r=>!r.done&&r.date>today).filter(r=>filterList===“all”||r.list===filterList);
-const filtered=selectedDate?base.filter(r=>r.date===selectedDate):base;
-const sorted=sortReminders(filtered,sort||“date”);
-const map={};
-sorted.forEach(r=>{const key=r.date||“no-date”;if(!map[key])map[key]=[];map[key].push(r);});
-return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
-},[s.reminders,filterList,selectedDate,sort,today]);
+  /* FIX 8: useMemo now depends on stable values, not array reference of `upcoming` */
+  const grouped=useMemo(()=>{
+    const base=s.reminders.filter(r=>!r.done&&r.date>today).filter(r=>filterList==="all"||r.list===filterList);
+    const filtered=selectedDate?base.filter(r=>r.date===selectedDate):base;
+    const sorted=sortReminders(filtered,sort||"date");
+    const map={};
+    sorted.forEach(r=>{const key=r.date||"no-date";if(!map[key])map[key]=[];map[key].push(r);});
+    return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
+  },[s.reminders,filterList,selectedDate,sort,today]);
 
-const makeDeleteHandler=(id)=>{
-const backup=s.reminders.find(x=>x.id===id);
-d({type:“DELETE”,id});
-if(backup)UndoMgr.show(“Deleted”,()=>d({type:“RESTORE”,r:backup}),V.danger);
-};
+  const makeDeleteHandler=(id)=>{
+    const backup=s.reminders.find(x=>x.id===id);
+    d({type:"DELETE",id});
+    if(backup)UndoMgr.show("Deleted",()=>d({type:"RESTORE",r:backup}),V.danger);
+  };
 
-return(
-<div className=“fade-up” style={{display:“flex”,flexDirection:“column”,gap:12}}>
-<QuickAdd lists={s.lists} onAdd={(r)=>d({type:“ADD”,r})}/>
+  return(
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:12}}>
+      <QuickAdd lists={s.lists} onAdd={(r)=>d({type:"ADD",r})}/>
 
-```
-  <div style={{display:"flex",gap:6,alignItems:"center"}}>
-    <button onClick={()=>{setViewMode("list");setSelectedDate(null);}} style={{padding:"5px 12px",borderRadius:10,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:V.font,background:viewMode==="list"?V.accent+"15":"rgba(255,255,255,0.03)",color:viewMode==="list"?V.accent:V.text3}}>List</button>
-    <button onClick={()=>setViewMode("calendar")} style={{padding:"5px 12px",borderRadius:10,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:V.font,background:viewMode==="calendar"?V.accent+"15":"rgba(255,255,255,0.03)",color:viewMode==="calendar"?V.accent:V.text3}}>Calendar</button>
-    <div style={{flex:1}}/>
-    <SortSelector sort={sort} setSort={setSort}/>
-  </div>
+      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+        <button onClick={()=>{setViewMode("list");setSelectedDate(null);}} style={{padding:"5px 12px",borderRadius:10,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:V.font,background:viewMode==="list"?V.accent+"15":"rgba(255,255,255,0.03)",color:viewMode==="list"?V.accent:V.text3}}>List</button>
+        <button onClick={()=>setViewMode("calendar")} style={{padding:"5px 12px",borderRadius:10,border:"none",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:V.font,background:viewMode==="calendar"?V.accent+"15":"rgba(255,255,255,0.03)",color:viewMode==="calendar"?V.accent:V.text3}}>Calendar</button>
+        <div style={{flex:1}}/>
+        <SortSelector sort={sort} setSort={setSort}/>
+      </div>
 
-  <div style={{display:"flex",gap:5,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
-    <button onClick={()=>setFilterList("all")} style={{padding:"6px 12px",borderRadius:16,border:"none",fontSize:11,fontWeight:600,fontFamily:V.font,cursor:"pointer",background:filterList==="all"?V.accent+"15":"rgba(255,255,255,0.04)",color:filterList==="all"?V.accent:V.text3,whiteSpace:"nowrap"}}>All</button>
-    {s.lists.map(l=>(
-      <button key={l.id} onClick={()=>setFilterList(filterList===l.id?"all":l.id)} style={{padding:"6px 12px",borderRadius:16,border:"none",fontSize:11,fontWeight:600,fontFamily:V.font,cursor:"pointer",background:filterList===l.id?l.color+"15":"rgba(255,255,255,0.04)",color:filterList===l.id?l.color:V.text3,whiteSpace:"nowrap"}}>
-        {l.icon} {l.label}
-      </button>
-    ))}
-  </div>
+      <div style={{display:"flex",gap:5,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+        <button onClick={()=>setFilterList("all")} style={{padding:"6px 12px",borderRadius:16,border:"none",fontSize:11,fontWeight:600,fontFamily:V.font,cursor:"pointer",background:filterList==="all"?V.accent+"15":"rgba(255,255,255,0.04)",color:filterList==="all"?V.accent:V.text3,whiteSpace:"nowrap"}}>All</button>
+        {s.lists.map(l=>(
+          <button key={l.id} onClick={()=>setFilterList(filterList===l.id?"all":l.id)} style={{padding:"6px 12px",borderRadius:16,border:"none",fontSize:11,fontWeight:600,fontFamily:V.font,cursor:"pointer",background:filterList===l.id?l.color+"15":"rgba(255,255,255,0.04)",color:filterList===l.id?l.color:V.text3,whiteSpace:"nowrap"}}>
+            {l.icon} {l.label}
+          </button>
+        ))}
+      </div>
 
-  {viewMode==="calendar"&&(
-    <CalendarView reminders={s.reminders} onDateClick={(dateStr)=>setSelectedDate(selectedDate===dateStr?null:dateStr)}/>
-  )}
-  {selectedDate&&<div style={{fontSize:11,color:V.accent,fontWeight:600}}>Showing: {fmtFull(selectedDate)} <button onClick={()=>setSelectedDate(null)} style={{background:"none",border:"none",color:V.text3,cursor:"pointer",fontSize:11,fontFamily:V.font}}>Clear</button></div>}
+      {viewMode==="calendar"&&(
+        <CalendarView reminders={s.reminders} onDateClick={(dateStr)=>setSelectedDate(selectedDate===dateStr?null:dateStr)}/>
+      )}
+      {selectedDate&&<div style={{fontSize:11,color:V.accent,fontWeight:600}}>Showing: {fmtFull(selectedDate)} <button onClick={()=>setSelectedDate(null)} style={{background:"none",border:"none",color:V.text3,cursor:"pointer",fontSize:11,fontFamily:V.font}}>Clear</button></div>}
 
-  {grouped.map(([date,items])=>(
-    <div key={date}>
-      <div style={{fontSize:10,fontWeight:700,color:V.accent2,letterSpacing:".06em",marginBottom:4,textTransform:"uppercase"}}>{fmtFull(date)}</div>
-      {items.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
-        onToggle={(id)=>{d({type:"TOGGLE",id});Haptic.success();}}
-        onDelete={makeDeleteHandler}
-        onEdit={(r)=>setShowEdit(r)}
-        onSnooze={(r)=>setSnoozeTarget(r)}/>)}
+      {grouped.map(([date,items])=>(
+        <div key={date}>
+          <div style={{fontSize:10,fontWeight:700,color:V.accent2,letterSpacing:".06em",marginBottom:4,textTransform:"uppercase"}}>{fmtFull(date)}</div>
+          {items.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
+            onToggle={(id)=>{d({type:"TOGGLE",id});Haptic.success();}}
+            onDelete={makeDeleteHandler}
+            onEdit={(r)=>setShowEdit(r)}
+            onSnooze={(r)=>setSnoozeTarget(r)}/>)}
+        </div>
+      ))}
+
+      {noDate.length>0&&(
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:V.text3,letterSpacing:".06em",marginBottom:4}}>SOMEDAY</div>
+          {noDate.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
+            onToggle={(id)=>{d({type:"TOGGLE",id});Haptic.success();}}
+            onDelete={makeDeleteHandler}
+            onEdit={(r)=>setShowEdit(r)}
+            onSnooze={(r)=>setSnoozeTarget(r)}/>)}
+        </div>
+      )}
+
+      {grouped.length===0&&noDate.length===0&&(
+        <div style={{textAlign:"center",padding:"40px 20px",color:V.text3}}>
+          <div style={{fontSize:48,marginBottom:12}}>📅</div>
+          <div style={{fontSize:15,fontWeight:600,color:V.text2,marginBottom:6}}>Nothing upcoming</div>
+          <div style={{fontSize:13}}>Reminders with future dates will appear here</div>
+        </div>
+      )}
+
+      {showEdit&&<EditSheet r={showEdit} lists={s.lists} onSave={(u)=>{d({type:"UPDATE",r:u});Toast.show("Updated",V.accent);}} onClose={()=>setShowEdit(null)}/>}
+      {snoozeTarget&&<SnoozeMenu onSnooze={(date,time)=>{d({type:"SNOOZE",id:snoozeTarget.id,date,time});Toast.show("Snoozed to "+fmtDate(date),V.accent);}} onClose={()=>setSnoozeTarget(null)}/>}
     </div>
-  ))}
-
-  {noDate.length>0&&(
-    <div>
-      <div style={{fontSize:10,fontWeight:700,color:V.text3,letterSpacing:".06em",marginBottom:4}}>SOMEDAY</div>
-      {noDate.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
-        onToggle={(id)=>{d({type:"TOGGLE",id});Haptic.success();}}
-        onDelete={makeDeleteHandler}
-        onEdit={(r)=>setShowEdit(r)}
-        onSnooze={(r)=>setSnoozeTarget(r)}/>)}
-    </div>
-  )}
-
-  {grouped.length===0&&noDate.length===0&&(
-    <div style={{textAlign:"center",padding:"40px 20px",color:V.text3}}>
-      <div style={{fontSize:48,marginBottom:12}}>📅</div>
-      <div style={{fontSize:15,fontWeight:600,color:V.text2,marginBottom:6}}>Nothing upcoming</div>
-      <div style={{fontSize:13}}>Reminders with future dates will appear here</div>
-    </div>
-  )}
-
-  {showEdit&&<EditSheet r={showEdit} lists={s.lists} onSave={(u)=>{d({type:"UPDATE",r:u});Toast.show("Updated",V.accent);}} onClose={()=>setShowEdit(null)}/>}
-  {snoozeTarget&&<SnoozeMenu onSnooze={(date,time)=>{d({type:"SNOOZE",id:snoozeTarget.id,date,time});Toast.show("Snoozed to "+fmtDate(date),V.accent);}} onClose={()=>setSnoozeTarget(null)}/>}
-</div>
-```
-
-);
+  );
 }
 
 // ─── LISTS TAB ───
 function ListsTab({s,d}){
-const [showEdit,setShowEdit]=useState(null);
-const [showNew,setShowNew]=useState(false);
-const [newList,setNewList]=useState({label:””,icon:“📝”,color:V.accent});
-const LIST_COLORS=[V.accent,”#60a5fa”,”#a78bfa”,”#f472b6”,”#34d399”,”#fbbf24”,”#f87171”,”#fb923c”];
-const LIST_ICONS=[“📝”,“💼”,“🏠”,“🛒”,“💊”,“🎯”,“📚”,“✈️”,“🎮”,“💪”,“🍔”,“🎵”,“🌱”,“🐾”,“🔧”];
+  const [showEdit,setShowEdit]=useState(null);
+  const [showNew,setShowNew]=useState(false);
+  const [newList,setNewList]=useState({label:"",icon:"📝",color:V.accent});
+  const LIST_COLORS=[V.accent,"#60a5fa","#a78bfa","#f472b6","#34d399","#fbbf24","#f87171","#fb923c"];
+  const LIST_ICONS=["📝","💼","🏠","🛒","💊","🎯","📚","✈️","🎮","💪","🍔","🎵","🌱","🐾","🔧"];
 
-return(
-<div className=“fade-up” style={{display:“flex”,flexDirection:“column”,gap:10}}>
-{s.lists.map(list=>{
-const count=s.reminders.filter(r=>r.list===list.id&&!r.done).length;
-const done=s.reminders.filter(r=>r.list===list.id&&r.done).length;
-return(
-<div key={list.id} onClick={()=>setShowEdit({list,items:s.reminders.filter(r=>r.list===list.id)})} style={{display:“flex”,alignItems:“center”,gap:12,padding:“14px 16px”,borderRadius:14,background:V.card,border:“1px solid “+V.cardBorder,cursor:“pointer”}}>
-<div style={{width:40,height:40,borderRadius:12,background:list.color+“20”,display:“flex”,alignItems:“center”,justifyContent:“center”,fontSize:20,flexShrink:0}}>{list.icon}</div>
-<div style={{flex:1}}>
-<div style={{fontSize:14,fontWeight:700,color:V.text}}>{list.label}</div>
-<div style={{fontSize:11,color:V.text3}}>{count} remaining · {done} done</div>
-</div>
-<div style={{display:“flex”,alignItems:“center”,gap:6}}>
-{count>0&&<div style={{minWidth:22,height:22,borderRadius:11,background:list.color+“20”,display:“flex”,alignItems:“center”,justifyContent:“center”,padding:“0 6px”}}><span style={{fontSize:11,fontWeight:800,color:list.color,fontFamily:V.mono}}>{count}</span></div>}
-<svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-</div>
-</div>
-);
-})}
+  return(
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:10}}>
+      {s.lists.map(list=>{
+        const count=s.reminders.filter(r=>r.list===list.id&&!r.done).length;
+        const done=s.reminders.filter(r=>r.list===list.id&&r.done).length;
+        return(
+          <div key={list.id} onClick={()=>setShowEdit({list,items:s.reminders.filter(r=>r.list===list.id)})} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderRadius:14,background:V.card,border:"1px solid "+V.cardBorder,cursor:"pointer"}}>
+            <div style={{width:40,height:40,borderRadius:12,background:list.color+"20",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{list.icon}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700,color:V.text}}>{list.label}</div>
+              <div style={{fontSize:11,color:V.text3}}>{count} remaining · {done} done</div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              {count>0&&<div style={{minWidth:22,height:22,borderRadius:11,background:list.color+"20",display:"flex",alignItems:"center",justifyContent:"center",padding:"0 6px"}}><span style={{fontSize:11,fontWeight:800,color:list.color,fontFamily:V.mono}}>{count}</span></div>}
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        );
+      })}
 
-```
-  <Btn v="secondary" full onClick={()=>setShowNew(true)}>+ New List</Btn>
+      <Btn v="secondary" full onClick={()=>setShowNew(true)}>+ New List</Btn>
 
-  {showNew&&(
-    <Sheet title="New List" onClose={()=>setShowNew(false)} footer={<Btn full onClick={()=>{if(!newList.label.trim())return;d({type:"ADD_LIST",list:{id:uid(),...newList}});Toast.show("List created",V.accent);setShowNew(false);setNewList({label:"",icon:"📝",color:V.accent});}}>Create List</Btn>}>
-      <Field label="List Name" value={newList.label} onChange={v=>setNewList(l=>({...l,label:v}))} placeholder="e.g. Weekend plans" autoFocus/>
-      <div style={{marginBottom:12}}>
-        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Icon</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-          {LIST_ICONS.map(ico=>(
-            <button key={ico} onClick={()=>setNewList(l=>({...l,icon:ico}))} style={{width:38,height:38,borderRadius:10,border:"2px solid "+(newList.icon===ico?V.accent:V.cardBorder),background:newList.icon===ico?V.accent+"15":"rgba(255,255,255,0.03)",fontSize:18,cursor:"pointer"}}>{ico}</button>
-          ))}
-        </div>
-      </div>
-      <div style={{marginBottom:12}}>
-        <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Color</div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {LIST_COLORS.map(c=>(
-            <button key={c} onClick={()=>setNewList(l=>({...l,color:c}))} style={{width:32,height:32,borderRadius:8,background:c,border:"2px solid "+(newList.color===c?"#fff":"transparent"),cursor:"pointer"}}/>
-          ))}
-        </div>
-      </div>
-    </Sheet>
-  )}
+      {showNew&&(
+        <Sheet title="New List" onClose={()=>setShowNew(false)} footer={<Btn full onClick={()=>{if(!newList.label.trim())return;d({type:"ADD_LIST",list:{id:uid(),...newList}});Toast.show("List created",V.accent);setShowNew(false);setNewList({label:"",icon:"📝",color:V.accent});}}>Create List</Btn>}>
+          <Field label="List Name" value={newList.label} onChange={v=>setNewList(l=>({...l,label:v}))} placeholder="e.g. Weekend plans" autoFocus/>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Icon</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {LIST_ICONS.map(ico=>(
+                <button key={ico} onClick={()=>setNewList(l=>({...l,icon:ico}))} style={{width:38,height:38,borderRadius:10,border:"2px solid "+(newList.icon===ico?V.accent:V.cardBorder),background:newList.icon===ico?V.accent+"15":"rgba(255,255,255,0.03)",fontSize:18,cursor:"pointer"}}>{ico}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:V.text3,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Color</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {LIST_COLORS.map(c=>(
+                <button key={c} onClick={()=>setNewList(l=>({...l,color:c}))} style={{width:32,height:32,borderRadius:8,background:c,border:"2px solid "+(newList.color===c?"#fff":"transparent"),cursor:"pointer"}}/>
+              ))}
+            </div>
+          </div>
+        </Sheet>
+      )}
 
-  {showEdit&&(
-    <Sheet title={showEdit.list.label} onClose={()=>setShowEdit(null)}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <div style={{fontSize:13,color:V.text3}}>{showEdit.items.filter(r=>!r.done).length} remaining</div>
-        {!DEFAULT_LISTS.find(l=>l.id===showEdit.list.id)&&(
-          <Btn v="danger" s={{minHeight:32,padding:"6px 14px",fontSize:12}} onClick={()=>{Confirm.show("Delete \""+showEdit.list.label+"\"?","All reminders in this list will also be deleted.",()=>{d({type:"DEL_LIST",id:showEdit.list.id});setShowEdit(null);});}}>Delete List</Btn>
-        )}
-      </div>
-      {showEdit.items.filter(r=>!r.done).map(r=>(
-        <ReminderRow key={r.id} r={r} lists={s.lists}
-          onToggle={(id)=>{d({type:"TOGGLE",id});Toast.show("Done!",V.green);}}
-          onDelete={(id)=>d({type:"DELETE",id})} onEdit={()=>{}}/>
-      ))}
-      {showEdit.items.filter(r=>r.done).length>0&&(
-        <div style={{marginTop:12,opacity:.5}}>
-          <div style={{fontSize:10,color:V.text3,fontWeight:600,marginBottom:4}}>COMPLETED</div>
-          {showEdit.items.filter(r=>r.done).slice(0,5).map(r=>(
+      {showEdit&&(
+        <Sheet title={showEdit.list.label} onClose={()=>setShowEdit(null)}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontSize:13,color:V.text3}}>{showEdit.items.filter(r=>!r.done).length} remaining</div>
+            {!DEFAULT_LISTS.find(l=>l.id===showEdit.list.id)&&(
+              <Btn v="danger" s={{minHeight:32,padding:"6px 14px",fontSize:12}} onClick={()=>{Confirm.show("Delete \""+showEdit.list.label+"\"?","All reminders in this list will also be deleted.",()=>{d({type:"DEL_LIST",id:showEdit.list.id});setShowEdit(null);});}}>Delete List</Btn>
+            )}
+          </div>
+          {showEdit.items.filter(r=>!r.done).map(r=>(
             <ReminderRow key={r.id} r={r} lists={s.lists}
-              onToggle={(id)=>d({type:"TOGGLE",id})}
+              onToggle={(id)=>{d({type:"TOGGLE",id});Toast.show("Done!",V.green);}}
               onDelete={(id)=>d({type:"DELETE",id})} onEdit={()=>{}}/>
           ))}
-        </div>
+          {showEdit.items.filter(r=>r.done).length>0&&(
+            <div style={{marginTop:12,opacity:.5}}>
+              <div style={{fontSize:10,color:V.text3,fontWeight:600,marginBottom:4}}>COMPLETED</div>
+              {showEdit.items.filter(r=>r.done).slice(0,5).map(r=>(
+                <ReminderRow key={r.id} r={r} lists={s.lists}
+                  onToggle={(id)=>d({type:"TOGGLE",id})}
+                  onDelete={(id)=>d({type:"DELETE",id})} onEdit={()=>{}}/>
+              ))}
+            </div>
+          )}
+        </Sheet>
       )}
-    </Sheet>
-  )}
-</div>
-```
-
-);
+    </div>
+  );
 }
 
 // ─── DONE TAB ───
 function DoneTab({s,d}){
-const done=s.reminders.filter(r=>r.done).sort((a,b)=>(b.doneAt||””).localeCompare(a.doneAt||””));
-const clearAll=()=>Confirm.show(“Clear completed?”,“All completed reminders will be permanently deleted.”,()=>{done.forEach(r=>d({type:“DELETE”,id:r.id}));Toast.show(“Cleared”,V.accent);});
-return(
-<div className=“fade-up” style={{display:“flex”,flexDirection:“column”,gap:4}}>
-{done.length>0&&(
-<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:4}}>
-<div style={{fontSize:12,color:V.text3}}>{done.length} completed</div>
-<Btn v=“danger” s={{minHeight:32,padding:“6px 14px”,fontSize:12}} onClick={clearAll}>Clear All</Btn>
-</div>
-)}
-{done.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
-onToggle={(id)=>d({type:“TOGGLE”,id})}
-onDelete={(id)=>d({type:“DELETE”,id})}
-onEdit={()=>{}}/>)}
-{done.length===0&&<div style={{textAlign:“center”,padding:“60px 20px”,color:V.text3}}><div style={{fontSize:48,marginBottom:12}}>✅</div><div style={{fontSize:15,fontWeight:600,color:V.text2,marginBottom:6}}>No completed reminders</div><div style={{fontSize:13}}>Complete a reminder and it will show up here</div></div>}
-</div>
-);
+  const done=s.reminders.filter(r=>r.done).sort((a,b)=>(b.doneAt||"").localeCompare(a.doneAt||""));
+  const clearAll=()=>Confirm.show("Clear completed?","All completed reminders will be permanently deleted.",()=>{done.forEach(r=>d({type:"DELETE",id:r.id}));Toast.show("Cleared",V.accent);});
+  return(
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:4}}>
+      {done.length>0&&(
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+          <div style={{fontSize:12,color:V.text3}}>{done.length} completed</div>
+          <Btn v="danger" s={{minHeight:32,padding:"6px 14px",fontSize:12}} onClick={clearAll}>Clear All</Btn>
+        </div>
+      )}
+      {done.map(r=><ReminderRow key={r.id} r={r} lists={s.lists}
+        onToggle={(id)=>d({type:"TOGGLE",id})}
+        onDelete={(id)=>d({type:"DELETE",id})}
+        onEdit={()=>{}}/>)}
+      {done.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:V.text3}}><div style={{fontSize:48,marginBottom:12}}>✅</div><div style={{fontSize:15,fontWeight:600,color:V.text2,marginBottom:6}}>No completed reminders</div><div style={{fontSize:13}}>Complete a reminder and it will show up here</div></div>}
+    </div>
+  );
 }
 
 // ─── APP ───
 function App(){
-const [s,d]=useReducer(reducer,init);
-const [showSearch,setShowSearch]=useState(false);
-const [showSettings,setShowSettings]=useState(false);
-const [showOnboarding,setShowOnboarding]=useState(()=>!LS.get(“rl-onboarded”));
-/* FIX 9: Theme re-render — bump this counter to force re-render after setTheme mutates V */
-const [,setThemeKey]=useState(0);
-const handleThemeChange=useCallback(()=>setThemeKey(k=>k+1),[]);
+  const [s,d]=useReducer(reducer,init);
+  const [showSearch,setShowSearch]=useState(false);
+  const [showSettings,setShowSettings]=useState(false);
+  const [showOnboarding,setShowOnboarding]=useState(()=>!LS.get("rl-onboarded"));
+  /* FIX 9: Theme re-render — bump this counter to force re-render after setTheme mutates V */
+  const [,setThemeKey]=useState(0);
+  const handleThemeChange=useCallback(()=>setThemeKey(k=>k+1),[]);
 
-const score=useMemo(()=>calcScore(s),[s.reminders,s.lists]);
-const missions=useMemo(()=>getDailyMissions(s),[s.reminders,s.lists]);
-const {celebrating,celebRank,dismiss:dismissLevel}=useLevelUp(score,“rl-last-level”);
+  const score=useMemo(()=>calcScore(s),[s.reminders,s.lists]);
+  const missions=useMemo(()=>getDailyMissions(s),[s.reminders,s.lists]);
+  const {celebrating,celebRank,dismiss:dismissLevel}=useLevelUp(score,"rl-last-level");
 
-useEffect(()=>{
-const reminders=LS.get(“rl-reminders”)||[];
-const lists=LS.get(“rl-lists”)||DEFAULT_LISTS;
-const migrated=reminders.map(r=>({…r,subtasks:r.subtasks||[]}));
-d({type:“INIT”,p:{reminders:migrated,lists}});
-if(Notif.granted())Notif.scheduleAll(migrated);
-},[]);
+  useEffect(()=>{
+    const reminders=LS.get("rl-reminders")||[];
+    const lists=LS.get("rl-lists")||DEFAULT_LISTS;
+    const migrated=reminders.map(r=>({...r,subtasks:r.subtasks||[],tags:r.tags||[]}));
+    d({type:"INIT",p:{reminders:migrated,lists}});
+    if(Notif.granted())Notif.scheduleAll(migrated);
+  },[]);
 
-useEffect(()=>{
-if(!s.loaded)return;
-LS.set(“rl-reminders”,s.reminders);
-LS.set(“rl-lists”,s.lists);
-},[s.reminders,s.lists,s.loaded]);
+  useEffect(()=>{
+    if(!s.loaded)return;
+    LS.set("rl-reminders",s.reminders);
+    LS.set("rl-lists",s.lists);
+  },[s.reminders,s.lists,s.loaded]);
 
-if(!s.loaded)return(
-<div style={{display:“flex”,alignItems:“center”,justifyContent:“center”,height:“100vh”,background:V.bg,flexDirection:“column”,gap:12}}>
-<div style={{fontSize:36}}>🔔</div>
-<div style={{fontSize:11,color:V.text3,fontFamily:V.mono,animation:“pulse 1.5s infinite”}}>Loading…</div>
-</div>
-);
-
-const overdueCount=s.reminders.filter(r=>!r.done&&isOverdue(r)).length;
-const todayCount=s.reminders.filter(r=>!r.done&&r.date===todayStr()).length;
-const tabs=[
-{id:“today”,label:“Today”,icon:“🏠”,badge:overdueCount>0?overdueCount:todayCount>0?todayCount:0,badgeColor:overdueCount>0?V.danger:V.accent},
-{id:“upcoming”,label:“Upcoming”,icon:“📅”,badge:0},
-{id:“lists”,label:“Lists”,icon:“📋”,badge:0},
-{id:“stats”,label:“Stats”,icon:“📊”,badge:0},
-{id:“done”,label:“Done”,icon:“✅”,badge:0},
-];
-
-return(
-<div style={{height:“100%”,display:“flex”,flexDirection:“column”,background:V.bg}}>
-<div style={{paddingTop:“max(16px,env(safe-area-inset-top,0px))”,paddingLeft:16,paddingRight:16,paddingBottom:10,background:V.navBg,borderBottom:“1px solid “+V.cardBorder,flexShrink:0,backdropFilter:“blur(12px)”}}>
-<div style={{display:“flex”,alignItems:“center”,justifyContent:“space-between”}}>
-<div style={{display:“flex”,alignItems:“center”,gap:8}}>
-<span style={{fontSize:22}}>🔔</span>
-<div>
-<div style={{fontSize:16,fontWeight:800,color:V.text,lineHeight:1}}>ReminderLog</div>
-<div style={{fontSize:9,color:V.text3,fontWeight:600,letterSpacing:”.1em”}}>by IRONLOG</div>
-</div>
-</div>
-<div style={{display:“flex”,alignItems:“center”,gap:6}}>
-{overdueCount>0&&<div style={{padding:“4px 10px”,borderRadius:20,background:V.danger+“20”,border:“1px solid “+V.danger+“30”}}><span style={{fontSize:11,fontWeight:800,color:V.danger}}>{overdueCount} overdue</span></div>}
-<button onClick={()=>setShowSearch(true)} style={{background:“none”,border:“none”,cursor:“pointer”,padding:8,display:“flex”,alignItems:“center”}}>
-<svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-</button>
-<button onClick={()=>setShowSettings(true)} style={{background:“none”,border:“none”,cursor:“pointer”,padding:8,display:“flex”,alignItems:“center”}}>
-<svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-</button>
-</div>
-</div>
-</div>
-
-```
-  <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}}>
-    <div className="main-scroll" style={{paddingTop:16}}>
-      {s.tab==="today"&&<TodayTab s={s} d={d} score={score} missions={missions}/>}
-      {s.tab==="upcoming"&&<UpcomingTab s={s} d={d}/>}
-      {s.tab==="lists"&&<ListsTab s={s} d={d}/>}
-      {s.tab==="stats"&&<StatsTab s={s}/>}
-      {s.tab==="done"&&<DoneTab s={s} d={d}/>}
+  if(!s.loaded)return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:V.bg,flexDirection:"column",gap:12}}>
+      <div style={{fontSize:36}}>🔔</div>
+      <div style={{fontSize:11,color:V.text3,fontFamily:V.mono,animation:"pulse 1.5s infinite"}}>Loading...</div>
     </div>
-  </div>
+  );
 
-  <div className="tab-bar" style={{background:V.navBg,borderTop:"1px solid "+V.cardBorder,display:"flex",backdropFilter:"blur(12px)",flexShrink:0,paddingTop:8}}>
-    {tabs.map(tab=>{
-      const active=s.tab===tab.id;
-      return(
-        <button key={tab.id} onClick={()=>{Haptic.light();d({type:"TAB",tab:tab.id});}} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,background:"none",border:"none",cursor:"pointer",padding:"4px 0",WebkitTapHighlightColor:"transparent",position:"relative"}}>
-          <span style={{fontSize:18,opacity:active?1:.5}}>{tab.icon}</span>
-          <span style={{fontSize:9,fontWeight:active?700:500,color:active?V.accent:V.text3}}>{tab.label}</span>
-          {active&&<div style={{width:4,height:4,borderRadius:2,background:V.accent,marginTop:-2}}/>}
-          {tab.badge>0&&!active&&<div style={{position:"absolute",top:0,right:"calc(50% - 14px)",minWidth:16,height:16,borderRadius:8,background:tab.badgeColor||V.accent,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}><span style={{fontSize:9,fontWeight:800,color:"#03090f",fontFamily:V.mono}}>{tab.badge}</span></div>}
-        </button>
-      );
-    })}
-  </div>
+  const overdueCount=s.reminders.filter(r=>!r.done&&isOverdue(r)).length;
+  const todayCount=s.reminders.filter(r=>!r.done&&r.date===todayStr()).length;
+  const tabs=[
+    {id:"today",label:"Today",icon:"🏠",badge:overdueCount>0?overdueCount:todayCount>0?todayCount:0,badgeColor:overdueCount>0?V.danger:V.accent},
+    {id:"upcoming",label:"Upcoming",icon:"📅",badge:0},
+    {id:"lists",label:"Lists",icon:"📋",badge:0},
+    {id:"stats",label:"Stats",icon:"📊",badge:0},
+    {id:"done",label:"Done",icon:"✅",badge:0},
+  ];
 
-  <ToastDisplay/>
-  <GlobalConfirm/>
-  <UndoToastBar/>
-  {celebrating&&celebRank&&<LevelUpCelebration rank={celebRank} onDismiss={dismissLevel}/>}
-  {showSearch&&<SearchSheet s={s} d={d} onClose={()=>setShowSearch(false)}/>}
-  {showSettings&&<SettingsSheet s={s} d={d} onClose={()=>setShowSettings(false)} onThemeChange={handleThemeChange}/>}
-  {showOnboarding&&<Onboarding onDone={()=>setShowOnboarding(false)}/>}
-</div>
-```
+  return(
+    <div style={{height:"100%",display:"flex",flexDirection:"column",background:V.bg}}>
+      <div style={{paddingTop:"max(16px,env(safe-area-inset-top,0px))",paddingLeft:16,paddingRight:16,paddingBottom:10,background:V.navBg,borderBottom:"1px solid "+V.cardBorder,flexShrink:0,backdropFilter:"blur(12px)"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:22}}>🔔</span>
+            <div>
+              <div style={{fontSize:16,fontWeight:800,color:V.text,lineHeight:1}}>ReminderLog</div>
+              <div style={{fontSize:9,color:V.text3,fontWeight:600,letterSpacing:".1em"}}>by IRONLOG</div>
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            {overdueCount>0&&<div style={{padding:"4px 10px",borderRadius:20,background:V.danger+"20",border:"1px solid "+V.danger+"30"}}><span style={{fontSize:11,fontWeight:800,color:V.danger}}>{overdueCount} overdue</span></div>}
+            <button onClick={()=>setShowSearch(true)} style={{background:"none",border:"none",cursor:"pointer",padding:8,display:"flex",alignItems:"center"}}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
+            <button onClick={()=>setShowSettings(true)} style={{background:"none",border:"none",cursor:"pointer",padding:8,display:"flex",alignItems:"center"}}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={V.text3} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
 
-);
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}}>
+        <div className="main-scroll" style={{paddingTop:16}}>
+          {s.tab==="today"&&<TodayTab s={s} d={d} score={score} missions={missions}/>}
+          {s.tab==="upcoming"&&<UpcomingTab s={s} d={d}/>}
+          {s.tab==="lists"&&<ListsTab s={s} d={d}/>}
+          {s.tab==="stats"&&<StatsTab s={s}/>}
+          {s.tab==="done"&&<DoneTab s={s} d={d}/>}
+        </div>
+      </div>
+
+      <div className="tab-bar" style={{background:V.navBg,borderTop:"1px solid "+V.cardBorder,display:"flex",backdropFilter:"blur(12px)",flexShrink:0,paddingTop:8}}>
+        {tabs.map(tab=>{
+          const active=s.tab===tab.id;
+          return(
+            <button key={tab.id} onClick={()=>{Haptic.light();d({type:"TAB",tab:tab.id});}} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,background:"none",border:"none",cursor:"pointer",padding:"4px 0",WebkitTapHighlightColor:"transparent",position:"relative"}}>
+              <span style={{fontSize:18,opacity:active?1:.5}}>{tab.icon}</span>
+              <span style={{fontSize:9,fontWeight:active?700:500,color:active?V.accent:V.text3}}>{tab.label}</span>
+              {active&&<div style={{width:4,height:4,borderRadius:2,background:V.accent,marginTop:-2}}/>}
+              {tab.badge>0&&!active&&<div style={{position:"absolute",top:0,right:"calc(50% - 14px)",minWidth:16,height:16,borderRadius:8,background:tab.badgeColor||V.accent,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}><span style={{fontSize:9,fontWeight:800,color:"#03090f",fontFamily:V.mono}}>{tab.badge}</span></div>}
+            </button>
+          );
+        })}
+      </div>
+
+      <ToastDisplay/>
+      <GlobalConfirm/>
+      <UndoToastBar/>
+      {celebrating&&celebRank&&<LevelUpCelebration rank={celebRank} onDismiss={dismissLevel}/>}
+      {showSearch&&<SearchSheet s={s} d={d} onClose={()=>setShowSearch(false)}/>}
+      {showSettings&&<SettingsSheet s={s} d={d} onClose={()=>setShowSettings(false)} onThemeChange={handleThemeChange}/>}
+      {showOnboarding&&<Onboarding onDone={()=>setShowOnboarding(false)}/>}
+    </div>
+  );
 }
-ReactDOM.createRoot(document.getElementById(“root”)).render(React.createElement(App));
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
 </script>
-
 </body>
 </html>
