@@ -65,7 +65,8 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').cat
   })
   .then(function(){
     return loadScript('https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js','Recharts')
-    .catch(function(){return loadScript('https://unpkg.com/recharts@2.5.0/umd/Recharts.js','Recharts');});
+    .catch(function(){return loadScript('https://unpkg.com/recharts@2.5.0/umd/Recharts.js','Recharts');})
+    .catch(function(){console.warn('Recharts not available, charts will be disabled');});
   })
   .then(function(){
     return loadScript('https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.0/babel.min.js','Babel')
@@ -74,7 +75,6 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').cat
   .then(function(){
     if(typeof React==='undefined')throw new Error('React not available');
     if(typeof ReactDOM==='undefined')throw new Error('ReactDOM not available');
-    if(typeof Recharts==='undefined')throw new Error('Recharts not available');
     if(typeof Babel==='undefined')throw new Error('Babel not available');
     var src=document.getElementById('app-src');
     if(!src)throw new Error('App source not found');
@@ -87,7 +87,9 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').cat
 </script>
 <script type="text/plain" id="app-src">
 const{useState,useEffect,useReducer,useCallback,useMemo,useRef}=React;
-const{BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,PieChart,Pie,Cell,LineChart,Line}=Recharts;
+const _Recharts=typeof Recharts!=='undefined'?Recharts:{};
+const{BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,PieChart,Pie,Cell,LineChart,Line}=_Recharts;
+const hasCharts=typeof Recharts!=='undefined';
 
 // ─── Utilities ───
 const LS={get:(k)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
@@ -917,6 +919,7 @@ function StatsTab({s}){
       <div style={{padding:16,borderRadius:14,background:V.card,border:"1px solid "+V.cardBorder}}>
         <div style={{fontSize:12,fontWeight:700,color:V.text,marginBottom:12}}>Last 14 Days</div>
         <div style={{width:"100%",height:180}}>
+          {hasCharts ? (
           <ResponsiveContainer>
             <BarChart data={chartData} barGap={2}>
               <XAxis dataKey="name" tick={{fontSize:9,fill:V.text3}} axisLine={false} tickLine={false} interval={2}/>
@@ -926,6 +929,9 @@ function StatsTab({s}){
               <Bar dataKey="added" fill={V.accent} radius={[3,3,0,0]} name="Added"/>
             </BarChart>
           </ResponsiveContainer>
+          ) : (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:V.text3,fontSize:11}}>Charts unavailable offline</div>
+          )}
         </div>
       </div>
 
@@ -959,6 +965,7 @@ function StatsTab({s}){
           <div style={{fontSize:12,fontWeight:700,color:V.text,marginBottom:12}}>Active by Priority</div>
           <div style={{display:"flex",justifyContent:"center"}}>
             <div style={{width:160,height:160}}>
+              {hasCharts ? (
               <ResponsiveContainer>
                 <PieChart>
                   <Pie data={byPriority} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={4} dataKey="value">
@@ -967,6 +974,9 @@ function StatsTab({s}){
                   <Tooltip contentStyle={{background:V.bg,border:"1px solid "+V.cardBorder,borderRadius:8,fontSize:11,color:V.text}}/>
                 </PieChart>
               </ResponsiveContainer>
+              ) : (
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:V.text3,fontSize:11}}>Charts unavailable offline</div>
+              )}
             </div>
           </div>
           <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:8}}>
