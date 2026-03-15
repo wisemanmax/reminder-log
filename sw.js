@@ -1,4 +1,4 @@
-const CACHE_NAME='reminderlog-v4';
+const CACHE_NAME='reminderlog-v5';
 const ASSETS=[
   '/',
   '/index.html',

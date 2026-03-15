@@ -1,7 +1,7 @@
 {
   "name": "ReminderLog",
   "short_name": "ReminderLog",
-  "description": "A reminders and task management PWA. Part of the IRONLOG ecosystem.",
+  "description": "A gamified reminder and task management PWA with achievements, focus mode, and smart quick-add. Part of the IRONLOG ecosystem.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -24,10 +24,22 @@
   "lang": "en-US",
   "shortcuts": [
     {
-      "name": "Open ReminderLog",
-      "short_name": "ReminderLog",
-      "description": "Open ReminderLog",
-      "url": "/"
+      "name": "Add Reminder",
+      "short_name": "Add",
+      "description": "Quickly add a new reminder",
+      "url": "/?action=add"
+    },
+    {
+      "name": "View Stats",
+      "short_name": "Stats",
+      "description": "View your statistics and progress",
+      "url": "/?tab=stats"
+    },
+    {
+      "name": "Achievements",
+      "short_name": "Badges",
+      "description": "View your achievement badges",
+      "url": "/?view=achievements"
     }
   ]
 }
