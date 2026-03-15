@@ -1,4 +1,4 @@
-const CACHE_NAME='reminderlog-v5';
+const CACHE_NAME='reminderlog-v6';
 const ASSETS=[
   '/',
   '/index.html',
@@ -7,10 +7,11 @@ const ASSETS=[
   'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap'
 ];
 const CDN_ASSETS=[
-  'https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js',
-  'https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js',
-  'https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js',
-  'https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.0/babel.min.js'
+  'https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js',
+  'https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js',
+  'https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js',
+  'https://cdn.jsdelivr.net/npm/recharts@2.10.0/umd/Recharts.js',
+  'https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.10/babel.min.js'
 ];
 self.addEventListener('install',e=>{
   e.waitUntil(
@@ -56,7 +57,14 @@ self.addEventListener('fetch',e=>{
           caches.open(CACHE_NAME).then(c=>c.put(e.request,clone));
         }
         return res;
-      }).catch(()=>caches.match(e.request))
+      }).catch(()=>caches.match(e.request).then(cached=>{
+        if(cached)return cached;
+        // Offline navigation fallback: serve cached index.html for HTML requests
+        if(e.request.mode==='navigate'){
+          return caches.match('/index.html');
+        }
+        return cached;
+      }))
     );
   }
 });

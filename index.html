@@ -186,7 +186,7 @@ const SessionManager={
   revoke:async()=>{
     const token=LS.get("ft-session-token");
     if(token){try{await fetch(`${SYNC_URL}/api/auth/session`,{method:"POST",headers:{"Content-Type":"application/json","X-Session-Token":token},body:JSON.stringify({action:"revoke",token})});}catch(e){}}
-    SentryUtil.breadcrumb("User signed out","auth");SentryUtil.reset();
+    if(typeof SentryUtil!=="undefined"){try{SentryUtil.breadcrumb("User signed out","auth");SentryUtil.reset();}catch(e){}}
     LS.set("ft-session-token",null);LS.set("ft-session-email",null);LS.set("ft-session-expires",null);LS.set("ft-is-admin",null);
     Cookie.clear("ironlog_session"); // Clear SSO cookie
   },
@@ -1376,9 +1376,7 @@ function ReminderRow({r,lists,onToggle,onDelete,onEdit,onSnooze,onFocus,bulkMode
       Haptic.priority(r.priority);
       onToggle(r.id);Toast.show("Done! +8 XP",V.green);XPFloat.show(8);}
     else if(swiped<-60){
-      const backup={...r};
       onDelete(r.id);
-      UndoMgr.show("Reminder deleted",()=>{},V.danger);
     }
     setSwiped(0);
     touchRef.current.swiping=false;
