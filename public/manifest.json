@@ -1,0 +1,51 @@
+{
+  "name": "ReminderLog",
+  "short_name": "ReminderLog",
+  "description": "A gamified reminder and task management PWA with achievements, focus mode, and smart quick-add. Part of the IRONLOG ecosystem.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#03090f",
+  "theme_color": "#03090f",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": [
+    "health",
+    "lifestyle",
+    "productivity"
+  ],
+  "scope": "/",
+  "lang": "en-US",
+  "shortcuts": [
+    {
+      "name": "Add Reminder",
+      "short_name": "Add",
+      "description": "Quickly add a new reminder",
+      "url": "/?action=add"
+    },
+    {
+      "name": "View Stats",
+      "short_name": "Stats",
+      "description": "View your statistics and progress",
+      "url": "/?tab=stats"
+    },
+    {
+      "name": "Achievements",
+      "short_name": "Badges",
+      "description": "View your achievement badges",
+      "url": "/?view=achievements"
+    }
+  ]
+}

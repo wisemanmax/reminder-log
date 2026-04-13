@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#071520"/>
+      <stop offset="100%" stop-color="#03090f"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="50%" cy="42%" r="55%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bellFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d2535"/>
+      <stop offset="100%" stop-color="#071520"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="subtleglow">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glowB)"/>
+
+  <!-- Outer ring (ping animation suggestion) -->
+  <circle cx="256" cy="232" r="158" fill="none" stroke="#38bdf8" stroke-width="1.5" opacity="0.1"/>
+  <circle cx="256" cy="232" r="132" fill="none" stroke="#38bdf8" stroke-width="1" opacity="0.08"/>
+
+  <!-- Bell body -->
+  <path d="
+    M 256 116
+    C 256 116 256 112 256 108
+    C 256 100 264 94 272 98
+    C 280 102 282 112 280 120
+    C 294 126 308 138 318 154
+    C 334 178 342 208 344 238
+    L 344 296
+    C 344 308 354 316 354 316
+    L 158 316
+    C 158 316 168 308 168 296
+    L 168 238
+    C 168 208 176 178 192 154
+    C 202 138 216 126 230 120
+    C 228 112 230 102 238 98
+    C 246 94 256 100 256 108
+    Z"
+    fill="url(#bellFill)" stroke="#38bdf8" stroke-width="3" stroke-opacity="0.7"/>
+
+  <!-- Bell inner glow -->
+  <path d="
+    M 256 116
+    C 294 126 342 178 344 238
+    L 344 296 C 344 308 354 316 354 316
+    L 158 316 C 158 316 168 308 168 296
+    L 168 238
+    C 170 178 218 126 256 116 Z"
+    fill="#38bdf8" opacity="0.05" filter="url(#glow)"/>
+
+  <!-- Bell clapper / rim -->
+  <rect x="148" y="314" width="216" height="18" rx="9" fill="#0d2535" stroke="#38bdf8" stroke-width="2.5" stroke-opacity="0.7"/>
+
+  <!-- Bell bottom rounded part (clapper ball) -->
+  <circle cx="256" cy="342" r="20" fill="#0d2535" stroke="#38bdf8" stroke-width="2.5" stroke-opacity="0.65"/>
+
+  <!-- Notification badge - top right of bell -->
+  <circle cx="320" cy="130" r="28" fill="#03090f" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.3"/>
+  <circle cx="320" cy="130" r="22" fill="#38bdf8" filter="url(#glow)"/>
+
+  <!-- Check mark inside badge -->
+  <polyline points="310,130 318,138 332,120"
+    fill="none" stroke="#03090f" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Subtle shine on bell left side -->
+  <path d="M 196 168 Q 188 200 188 238"
+    fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" opacity="0.25"/>
+
+  <!-- RL monogram -->
+  <text x="256" y="430" text-anchor="middle" font-family="'Helvetica Neue', Arial, sans-serif"
+    font-size="24" font-weight="700" letter-spacing="4" fill="#38bdf8" opacity="0.28">RL</text>
+</svg>
